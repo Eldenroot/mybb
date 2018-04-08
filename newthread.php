@@ -150,7 +150,7 @@ if(!$mybb->get_input('posthash') && !$pid)
 
 if((empty($_POST) && empty($_FILES)) && $mybb->get_input('processed', MyBB::INPUT_INT) == 1)
 {
-	error($lang->error_empty_post_input);
+	error($lang->error_cannot_upload_php_post);
 }
 
 $errors = array();
@@ -173,12 +173,33 @@ if($mybb->settings['enableattachments'] == 1 && !$mybb->get_input('attachmentaid
 
 	// If there's an attachment, check it and upload it
 	if($forumpermissions['canpostattachments'] != 0)
+		
+	$fields = array ('name', 'type', 'tmp_name', 'error', 'size');
+        if (is_array($_FILES['attachment']['name']))
+        {
+            // Already in multi-attachment array format
+            $attachments = $_FILES;
+        }
+        else
+        {
+            // Convert original-style non-array $_FILES['attachment'][$field] to array format in $attachments
+            $attachments = array('attachment' => array());
+            foreach ($fields as $field)
+                $attachments['attachment'][$field] = array($_FILES['attachment'][$field]);
+        }
+        foreach ($attachments['attachment']['name'] as $key => $name)
+        {
+            // Convert array $attachments['attachment'][$field][$key] to non-array format in $FILE
+            $FILE = array('attachment' => array());                
+            foreach ($fields as $field)
+                $FILE['attachment'][$field] = $attachments['attachment'][$field][$key];
+	
 	{
-		if(!empty($_FILES['attachment']['name']) && !empty($_FILES['attachment']['type']))
+		if(!empty($FILE['attachment']['name']) && !empty($FILE['attachment']['type']))
 		{
-			if($_FILES['attachment']['size'] > 0)
+			if($FILE['attachment']['size'] > 0)
 			{
-				$query = $db->simple_select("attachments", "aid", "filename='".$db->escape_string($_FILES['attachment']['name'])."' AND {$attachwhere}");
+				$query = $db->simple_select("attachments", "aid", "filename='".$db->escape_string($FILE['attachment']['name'])."' AND {$attachwhere}");
 				$updateattach = $db->fetch_field($query, "aid");
 
 				require_once MYBB_ROOT."inc/functions_upload.php";
@@ -188,13 +209,14 @@ if($mybb->settings['enableattachments'] == 1 && !$mybb->get_input('attachmentaid
 				{
 					$update_attachment = true;
 				}
-				$attachedfile = upload_attachment($_FILES['attachment'], $update_attachment);
+				$attachedfile = upload_attachment($FILE['attachment'], $update_attachment);
 			}
 			else
 			{
 				$errors[] = $lang->error_uploadempty;
 				$mybb->input['action'] = "newthread";
 			}
+		}
 		}
 	}
 
@@ -1178,4 +1200,3 @@ if($mybb->input['action'] == "newthread" || $mybb->input['action'] == "editdraft
 	eval("\$newthread = \"".$templates->get("newthread")."\";");
 	output_page($newthread);
 }
-
