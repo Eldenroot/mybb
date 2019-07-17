@@ -101,7 +101,7 @@ $l['additional_info'] = "Additional Information";
 $l['required_info'] = "Required Information";
 $l['i_agree'] = "I Agree";
 $l['account_details'] = "Account Details";
-$l['account_prefs'] = "Account Preferences:";
+$l['account_prefs'] = "Account Preferences";
 $l['invisible_mode'] = "Hide me from the Who's Online list.";
 $l['allow_notices'] = "Receive emails from the Administrators.";
 $l['hide_email'] = "Hide your email from other members.";
@@ -109,7 +109,7 @@ $l['email_notify'] = "Automatically subscribe to threads you post in.";
 $l['receive_pms'] = "Receive private messages from other users.";
 $l['pm_notice'] = "Alert me with a notice when I receive a Private Message.";
 $l['email_notify_newpm'] = "Notify me by email when I receive a new Private Message.";
-$l['time_offset'] = "Time Zone (<abbr title=\"Daylight Saving Time\">DST</abbr> correction excluded):";
+$l['time_offset'] = "Time Zone (<abbr title=\"Daylight Saving Time\">DST</abbr> correction excluded)";
 $l['time_offset_desc'] = "If you live in a time zone which differs to what this board is set at, you can select it from the list below.";
 $l['dst_correction'] = "Daylight Saving Time correction:";
 $l['dst_correction_auto'] = "Automatically detect DST settings";
@@ -146,13 +146,13 @@ $l['coppa_agreement_3'] = "If you'd like to, you can begin the registration proc
 $l['error_invalid_birthday'] = 'The birthday you entered is invalid. Please enter a valid birthday.';
 $l['error_awaitingcoppa'] = "You cannot login using this account as it is still awaiting COPPA validation from a parent or guardian.<br /><br />A parent or legal guardian will need to download, fill in and submit to us a completed copy of our <a href=\"member.php?action=coppa_form\">COPPA Compliance &amp; Permission form</a>.<br /><br />Once we receive a completed copy of this form, the account will be activated.";
 
-$l['lang_select'] = "Language Settings:";
+$l['lang_select'] = "Language Settings";
 $l['lang_select_desc'] = "If you live in a country that speaks a language other than the forums default, you may be able to select an installed, read-able language pack below.";
 $l['lang_select_default'] = "Use Default";
 
 $l['submit_registration'] = "Submit Registration!";
 $l['confirm_password'] = "Confirm Password:";
-$l['referrer'] = "Referrer:";
+$l['referrer'] = "Referrer";
 $l['referrer_desc'] = "If you were referred to these forums by another member you can enter their name below. If not, simply leave this field blank.";
 $l['resend_activation'] = "Resend Account Activation";
 $l['request_activation'] = "Request Activation Code";
