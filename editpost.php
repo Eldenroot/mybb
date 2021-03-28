@@ -337,20 +337,39 @@ if($mybb->input['action'] == "deletepost" && $mybb->request_method == "post")
 				require_once MYBB_ROOT."inc/class_moderation.php";
 				$moderation = new Moderation;
 
-				if($mybb->settings['soft_delete'] == 1 || is_moderator($fid, "cansoftdeleteposts"))
+				if($mybb->settings['default_delete_button_behavior'] == softdeletepost)
 				{
-					$modlogdata['pid'] = $pid;
+					if($mybb->settings['soft_delete'] == 1 || is_moderator($fid, "cansoftdeleteposts"))
+					{
+						$modlogdata['pid'] = $pid;
 
-					$moderation->soft_delete_posts(array($pid));
-					log_moderator_action($modlogdata, $lang->post_soft_deleted);
+						$moderation->soft_delete_posts(array($pid));
+						log_moderator_action($modlogdata, $lang->post_soft_deleted);
+					}
+					else
+					{
+						$moderation->delete_post($pid);
+						mark_reports($pid, "post");
+						log_moderator_action($modlogdata, $lang->post_deleted);
+					}
 				}
-				else
+				if($mybb->settings['default_delete_button_behavior'] == permanentdeletepost)
 				{
-					$moderation->delete_post($pid);
-					mark_reports($pid, "post");
-					log_moderator_action($modlogdata, $lang->post_deleted);
-				}
+					if($mybb->settings['soft_delete'] == 1 && is_moderator($fid, "cansoftdeleteposts"))
+					{
+						$modlogdata['pid'] = $pid;
 
+						$moderation->soft_delete_posts(array($pid));
+						log_moderator_action($modlogdata, $lang->post_soft_deleted);
+					}
+					else
+					{
+						$moderation->delete_post($pid);
+						mark_reports($pid, "post");
+						log_moderator_action($modlogdata, $lang->post_deleted);
+					}
+				}
+				
 				$query = $db->simple_select("posts", "pid", "tid='{$tid}' AND dateline <= '{$post['dateline']}'", array("limit" => 1, "order_by" => "dateline DESC, pid DESC"));
 				$next_post = $db->fetch_array($query);
 				if($next_post['pid'])

@@ -1473,10 +1473,20 @@ min=0]]></optionscode>
 			<settingvalue><![CDATA[1]]></settingvalue>
 			<isdefault>1</isdefault>
 		</setting>
+		<setting name="default_delete_button_behavior">
+			<title>Default Delete Button Behavior in Posts for Administrators and Moderators</title>
+			<description><![CDATA[Select default behavior for a delete button in a postbit for administrators and moderators.]]></description>
+			<disporder>23</disporder>
+			<optionscode><![CDATA[radio
+softdeletepost=Soft delete posts
+permanentdeletepost=Delete posts permanently]]></optionscode>
+			<settingvalue><![CDATA[softdeletepost]]></settingvalue>
+			<isdefault>1</isdefault>
+		</setting>
 		<setting name="announcementshtml">
 			<title>Allow HTML in Announcements</title>
 			<description><![CDATA[Allow moderators to enable HTML parsing in announcements?]]></description>
-			<disporder>23</disporder>
+			<disporder>24</disporder>
 			<optionscode><![CDATA[yesno]]></optionscode>
 			<settingvalue><![CDATA[0]]></settingvalue>
 			<isdefault>1</isdefault>
@@ -1484,7 +1494,7 @@ min=0]]></optionscode>
 		<setting name="showownunapproved">
 			<title>Access Own Unapproved Threads / Posts</title>
 			<description><![CDATA[Allow general users to access their own unapproved threads and posts.]]></description>
-			<disporder>24</disporder>
+			<disporder>25</disporder>
 			<optionscode><![CDATA[yesno]]></optionscode>
 			<settingvalue><![CDATA[0]]></settingvalue>
 			<isdefault>1</isdefault>
