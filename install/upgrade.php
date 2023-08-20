@@ -47,11 +47,10 @@ $mybb->config = &$config;
 
 // Include the files necessary for installation
 require_once MYBB_ROOT."inc/class_timers.php";
-require_once MYBB_ROOT."inc/class_xml.php";
 require_once MYBB_ROOT.'inc/class_language.php';
 
 $lang = new MyLanguage();
-$lang->set_path(MYBB_ROOT.'install/resources/');
+$lang->set_path(INSTALL_ROOT.'resources/');
 $lang->load('language');
 
 // If we're upgrading from an SQLite installation, make sure we still work.
@@ -62,6 +61,7 @@ if($config['database']['type'] == 'sqlite3' || $config['database']['type'] == 's
 
 // Load DB interface
 require_once MYBB_ROOT."inc/db_base.php";
+require_once MYBB_ROOT . 'inc/AbstractPdoDbDriver.php';
 
 require_once MYBB_ROOT."inc/db_{$config['database']['type']}.php";
 switch($config['database']['type'])
@@ -72,8 +72,14 @@ switch($config['database']['type'])
 	case "pgsql":
 		$db = new DB_PgSQL;
 		break;
+	case "pgsql_pdo":
+		$db = new PostgresPdoDbDriver();
+		break;
 	case "mysqli":
 		$db = new DB_MySQLi;
+		break;
+	case "mysql_pdo":
+		$db = new MysqlPdoDbDriver();
 		break;
 	default:
 		$db = new DB_MySQL;
@@ -207,7 +213,7 @@ else
 			}
 		}
 
-		my_setcookie("mybbuser", $user['uid']."_".$user['loginkey'], null, true);
+		my_setcookie("mybbuser", $user['uid']."_".$user['loginkey'], null, true, "lax");
 
 		header("Location: ./upgrade.php");
 	}
@@ -261,11 +267,20 @@ else
 		{
 			$db->drop_table("upgrade_data");
 		}
+
+		$collation = $db->build_create_table_collation();
+		
+		$engine = '';
+		if($db->type == "mysql" || $db->type == "mysqli")
+		{
+			$engine = 'ENGINE=MyISAM';
+		}
+		
 		$db->write_query("CREATE TABLE ".TABLE_PREFIX."upgrade_data (
 			title varchar(30) NOT NULL,
 			contents text NOT NULL,
 			UNIQUE (title)
-		);");
+		) {$engine}{$collation};");
 
 		$dh = opendir(INSTALL_ROOT."resources");
 
@@ -317,14 +332,22 @@ else
 		unset($upgradescripts);
 		unset($upgradescript);
 
-		$output->print_contents($lang->sprintf($lang->upgrade_welcome, $mybb->version)."<p><select name=\"from\">$vers</select>".$lang->upgrade_send_stats);
-		$output->print_footer("doupgrade");
+		if(end($version_history) == reset($key_order) && empty($mybb->input['force']))
+		{
+			$output->print_contents($lang->upgrade_not_needed);
+			$output->print_footer("finished");
+		}
+		else
+		{
+			$output->print_contents($lang->sprintf($lang->upgrade_welcome, $mybb->version)."<p><select name=\"from\">$vers</select>".$lang->upgrade_send_stats);
+			$output->print_footer("doupgrade");
+		}
 	}
 	elseif($mybb->input['action'] == "doupgrade")
 	{
 		add_upgrade_store("allow_anonymous_info", $mybb->get_input('allow_anonymous_info', MyBB::INPUT_INT));
 		require_once INSTALL_ROOT."resources/upgrade".$mybb->get_input('from', MyBB::INPUT_INT).".php";
-		if($db->table_exists("datacache") && $upgrade_detail['requires_deactivated_plugins'] == 1 && $mybb->get_input('donewarning') != "true")
+		if($db->table_exists("datacache") && !empty($upgrade_detail['requires_deactivated_plugins']) && $mybb->get_input('donewarning') != "true")
 		{
 			$plugins = $cache->read('plugins', true);
 			if(!empty($plugins['active']))
@@ -368,7 +391,7 @@ else
 	else // Busy running modules, come back later
 	{
 		$bits = explode("_", $mybb->input['action'], 2);
-		if($bits[1]) // We're still running a module
+		if(!empty($bits[1])) // We're still running a module
 		{
 			$from = $bits[0];
 			$runfunction = next_function($bits[0], $bits[1]);
@@ -491,7 +514,7 @@ function upgradethemes()
 
 	// Now deal with the master templates
 	$contents = @file_get_contents(INSTALL_ROOT.'resources/mybb_theme.xml');
-	$parser = new XMLParser($contents);
+	$parser = create_xml_parser($contents);
 	$tree = $parser->get_tree();
 
 	$theme = $tree['theme'];
@@ -566,7 +589,7 @@ function buildcaches()
 
 	$output->print_header($lang->upgrade_datacache_building);
 
-	$contents .= $lang->upgrade_building_datacache;
+	$contents = $lang->upgrade_building_datacache;
 
 	$cache->update_version();
 	$cache->update_attachtypes();
@@ -588,7 +611,6 @@ function buildcaches()
 	$cache->update_tasks();
 	$cache->update_spiders();
 	$cache->update_bannedips();
-	$cache->update_banned();
 	$cache->update_birthdays();
 	$cache->update_most_replied_threads();
 	$cache->update_most_viewed_threads();
@@ -728,7 +750,7 @@ function next_function($from, $func="dbchanges")
 		}
 	}
 
-	if(!$function)
+	if(empty($function))
 	{
 		$function = "whatsnext";
 	}
@@ -747,7 +769,7 @@ function load_module($module)
 	{
 		foreach($upgrade_detail as $key => $val)
 		{
-			if(!$system_upgrade_detail[$key] || $val > $system_upgrade_detail[$key])
+			if(empty($system_upgrade_detail[$key]) || $val > $system_upgrade_detail[$key])
 			{
 				$system_upgrade_detail[$key] = $val;
 			}
@@ -911,7 +933,7 @@ function sync_settings($redo=0)
 		}
 	}
 	$settings_xml = file_get_contents(INSTALL_ROOT."resources/settings.xml");
-	$parser = new XMLParser($settings_xml);
+	$parser = create_xml_parser($settings_xml);
 	$parser->collapse_dups = 0;
 	$tree = $parser->get_tree();
 	$settinggroupnames = array();
@@ -980,10 +1002,12 @@ function sync_settings($redo=0)
 		}
 	}
 	unset($settings);
+	$settings = '';
 	$query = $db->simple_select("settings", "*", "", array('order_by' => 'title'));
 	while($setting = $db->fetch_array($query))
 	{
-		$setting['value'] = str_replace("\"", "\\\"", $setting['value']);
+		$setting['name'] = addcslashes($setting['name'], "\\'");
+		$setting['value'] = addcslashes($setting['value'], '\\"$');
 		$settings .= "\$settings['{$setting['name']}'] = \"".$setting['value']."\";\n";
 	}
 	$settings = "<?php\n/*********************************\ \n  DO NOT EDIT THIS FILE, PLEASE USE\n  THE SETTINGS EDITOR\n\*********************************/\n\n$settings\n";
@@ -1078,7 +1102,7 @@ function sync_tasks($redo=0)
 
 	require_once MYBB_ROOT."inc/functions_task.php";
 	$task_file = file_get_contents(INSTALL_ROOT.'resources/tasks.xml');
-	$parser = new XMLParser($task_file);
+	$parser = create_xml_parser($task_file);
 	$parser->collapse_dups = 0;
 	$tree = $parser->get_tree();
 
@@ -1129,7 +1153,8 @@ function write_settings()
 	$query = $db->simple_select("settings", "*", "", array('order_by' => 'title'));
 	while($setting = $db->fetch_array($query))
 	{
-		$setting['value'] = $db->escape_string($setting['value']);
+		$setting['name'] = addcslashes($setting['name'], "\\'");
+		$setting['value'] = addcslashes($setting['value'], '\\"$');
 		$settings .= "\$settings['{$setting['name']}'] = \"{$setting['value']}\";\n";
 	}
 	if(!empty($settings))

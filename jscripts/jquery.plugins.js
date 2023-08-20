@@ -1,5 +1,5 @@
 /**
- * jGrowl 1.4.3
+ * jGrowl 1.4.5
  *
  * Dual licensed under the MIT (http://www.opensource.org/licenses/mit-license.php)
  * and GPL (http://www.opensource.org/licenses/gpl-license.php) licenses.
@@ -158,7 +158,7 @@
 			}).bind('jGrowl.afterOpen', function() {
 				o.afterOpen.apply( notification , [notification,message,o,self.element] );
 			}).bind('click', function() {
-				o.click.apply( notification, [notification.message,o,self.element] );
+				o.click.apply( notification, [notification,message,o,self.element] );
 			}).bind('jGrowl.beforeClose', function() {
 				if ( o.beforeClose.apply( notification , [notification,message,o,self.element] ) !== false )
 					$(this).trigger('jGrowl.close');
@@ -253,24 +253,52 @@
 
 /*
     A simple jQuery modal (http://github.com/kylefox/jquery-modal)
-    Version 0.5.8
+    Version 0.8.0
 */
-(function($) {
 
-  var current = null;
+(function (factory) {
+  // Making your jQuery plugin work better with npm tools
+  // http://blog.npmjs.org/post/112712169830/making-your-jquery-plugin-work-better-with-npm
+  if(typeof module === "object" && typeof module.exports === "object") {
+    factory(require("jquery"), window, document);
+  }
+  else {
+    factory(jQuery, window, document);
+  }
+}(function($, window, document, undefined) {
+
+  var modals = [],
+      getCurrent = function() {
+        return modals.length ? modals[modals.length - 1] : null;
+      },
+      selectCurrent = function() {
+        var i,
+            selected = false;
+        for (i=modals.length-1; i>=0; i--) {
+          if (modals[i].$blocker) {
+            modals[i].$blocker.toggleClass('current',!selected).toggleClass('behind',selected);
+            selected = true;
+          }
+        }
+      };
 
   $.modal = function(el, options) {
-    $.modal.close(); // Close any open modals.
     var remove, target;
     this.$body = $('body');
     this.options = $.extend({}, $.modal.defaults, options);
     this.options.doFade = !isNaN(parseInt(this.options.fadeDuration, 10));
+    this.$blocker = null;
+    if (this.options.closeExisting)
+      while ($.modal.isActive())
+        $.modal.close(); // Close any open modals.
+    modals.push(this);
     if (el.is('a')) {
       target = el.attr('href');
       //Select element by id from href
       if (/^#/.test(target)) {
         this.$elm = $(target);
         if (this.$elm.length !== 1) return null;
+        this.$body.append(this.$elm);
         this.open();
       //AJAX
       } else {
@@ -280,15 +308,18 @@
         this.showSpinner();
         el.trigger($.modal.AJAX_SEND);
         $.get(target).done(function(html) {
-          if (!current) return;
+          if (!$.modal.isActive()) return;
           el.trigger($.modal.AJAX_SUCCESS);
+          var current = getCurrent();
           current.$elm.empty().append(html).on($.modal.CLOSE, remove);
           current.hideSpinner();
           current.open();
           el.trigger($.modal.AJAX_COMPLETE);
         }).fail(function() {
           el.trigger($.modal.AJAX_FAIL);
+          var current = getCurrent();
           current.hideSpinner();
+          modals.pop(); // remove expected modal from the list
           el.trigger($.modal.AJAX_COMPLETE);
         });
       }
@@ -304,54 +335,54 @@
 
     open: function() {
       var m = this;
+      this.block();
       if(this.options.doFade) {
-        this.block();
         setTimeout(function() {
           m.show();
         }, this.options.fadeDuration * this.options.fadeDelay);
       } else {
-        this.block();
         this.show();
       }
-      if (this.options.escapeClose) {
-        $(document).on('keydown.modal', function(event) {
-          if (event.which == 27) $.modal.close();
+      $(document).off('keydown.modal').on('keydown.modal', function(event) {
+        var current = getCurrent();
+        if (event.which == 27 && current.options.escapeClose) current.close();
+      });
+      if (this.options.clickClose)
+        this.$blocker.on('click',function(e) {
+          if (e.target==this)
+            $.modal.close();
         });
-      }
-      if (this.options.clickClose) this.blocker.click($.modal.close);
     },
 
     close: function() {
+      modals.pop();
       this.unblock();
       this.hide();
-      $(document).off('keydown.modal');
+      if (!$.modal.isActive())
+        $(document).off('keydown.modal');
     },
 
     block: function() {
-      var initialOpacity = this.options.doFade ? 0 : this.options.opacity;
       this.$elm.trigger($.modal.BEFORE_BLOCK, [this._ctx()]);
-      this.blocker = $('<div class="jquery-modal blocker"></div>').css({
-        top: 0, right: 0, bottom: 0, left: 0,
-        width: "100%", height: "100%",
-        position: "fixed",
-        zIndex: this.options.zIndex,
-        background: this.options.overlay,
-        opacity: initialOpacity
-      });
-      this.$body.append(this.blocker);
+      this.$body.css('overflow','hidden');
+      this.$blocker = $('<div class="jquery-modal blocker current"></div>').appendTo(this.$body);
+      selectCurrent();
       if(this.options.doFade) {
-        this.blocker.animate({opacity: this.options.opacity}, this.options.fadeDuration);
+        this.$blocker.css('opacity',0).animate({opacity: 1}, this.options.fadeDuration);
       }
       this.$elm.trigger($.modal.BLOCK, [this._ctx()]);
     },
 
-    unblock: function() {
-      if(this.options.doFade) {
-        this.blocker.fadeOut(this.options.fadeDuration, function() {
-          $(this).remove();
-        });
-      } else {
-        this.blocker.remove();
+    unblock: function(now) {
+      if (!now && this.options.doFade)
+        this.$blocker.fadeOut(this.options.fadeDuration, this.unblock.bind(this,true));
+      else {
+        this.$blocker.children().appendTo(this.$body);
+        this.$blocker.remove();
+        this.$blocker = null;
+        selectCurrent();
+        if (!$.modal.isActive())
+          this.$body.css('overflow','');
       }
     },
 
@@ -361,10 +392,9 @@
         this.closeButton = $('<a href="#close-modal" rel="modal:close" class="close-modal ' + this.options.closeClass + '">' + this.options.closeText + '</a>');
         this.$elm.append(this.closeButton);
       }
-      this.$elm.addClass(this.options.modalClass + ' current');
-      this.center();
+      this.$elm.addClass(this.options.modalClass).appendTo(this.$blocker);
       if(this.options.doFade) {
-        this.$elm.fadeIn(this.options.fadeDuration);
+        this.$elm.css('opacity',0).show().animate({opacity: 1}, this.options.fadeDuration);
       } else {
         this.$elm.show();
       }
@@ -374,12 +404,15 @@
     hide: function() {
       this.$elm.trigger($.modal.BEFORE_CLOSE, [this._ctx()]);
       if (this.closeButton) this.closeButton.remove();
-      this.$elm.removeClass('current');
-
+      var _this = this;
       if(this.options.doFade) {
-        this.$elm.fadeOut(this.options.fadeDuration);
+        this.$elm.fadeOut(this.options.fadeDuration, function () {
+          _this.$elm.trigger($.modal.AFTER_CLOSE, [_this._ctx()]);
+        });
       } else {
-        this.$elm.hide();
+        this.$elm.hide(0, function () {
+          _this.$elm.trigger($.modal.AFTER_CLOSE, [_this._ctx()]);
+        });
       }
       this.$elm.trigger($.modal.CLOSE, [this._ctx()]);
     },
@@ -396,49 +429,29 @@
       if (this.spinner) this.spinner.remove();
     },
 
-    center: function() {
-      this.$elm.css({
-        position: 'fixed',
-        top: "50%",
-        left: "50%",
-        marginTop: - (this.$elm.outerHeight() / 2),
-        marginLeft: - (this.$elm.outerWidth() / 2),
-        zIndex: this.options.zIndex + 1
-      });
-    },
-
     //Return context for custom events
     _ctx: function() {
-      return { elm: this.$elm, blocker: this.blocker, options: this.options };
+      return { elm: this.$elm, $blocker: this.$blocker, options: this.options };
     }
   };
 
-  //resize is alias for center for now
-  $.modal.prototype.resize = $.modal.prototype.center;
-
   $.modal.close = function(event) {
-    if (!current) return;
+    if (!$.modal.isActive()) return;
     if (event) event.preventDefault();
+    var current = getCurrent();
     current.close();
-    var that = current.$elm;
-    current = null;
-    return that;
-  };
-
-  $.modal.resize = function() {
-    if (!current) return;
-    current.resize();
+    return current.$elm;
   };
 
   // Returns if there currently is an active modal
   $.modal.isActive = function () {
-    return current ? true : false;
+    return modals.length > 0;
   }
 
+  $.modal.getCurrent = getCurrent;
+
   $.modal.defaults = {
-    overlay: "#000",
-    opacity: 0.75,
-    zIndex: 1,
+    closeExisting: true,
     escapeClose: true,
     clickClose: true,
     closeText: 'Close',
@@ -458,6 +471,7 @@
   $.modal.OPEN = 'modal:open';
   $.modal.BEFORE_CLOSE = 'modal:before-close';
   $.modal.CLOSE = 'modal:close';
+  $.modal.AFTER_CLOSE = 'modal:after-close';
   $.modal.AJAX_SEND = 'modal:ajax:send';
   $.modal.AJAX_SUCCESS = 'modal:ajax:success';
   $.modal.AJAX_FAIL = 'modal:ajax:fail';
@@ -465,7 +479,7 @@
 
   $.fn.modal = function(options){
     if (this.length === 1) {
-      current = new $.modal(this, options);
+      new $.modal(this, options);
     }
     return this;
   };
@@ -476,8 +490,7 @@
     event.preventDefault();
     $(this).modal();
   });
-})(jQuery);
-
+}));
 
 /*
 	Conversion of 1.6.x popup_menu.js
@@ -549,1051 +562,173 @@
 		return this.each(function()
 		{
 			var popup = new PopupMenu(this, close_in_popupmenu);
-			$(this).click(popup.open);
+			$(this).on('click',popup.open);
 		});
 	}
 })(jQuery);
 
-/*! jQuery-Impromptu - v6.2.1 - 2015-05-10
-* http://trentrichardson.com/Impromptu
-* Copyright (c) 2015 Trent Richardson; Licensed MIT */
-(function(root, factory) {
-	if (typeof define === 'function' && define.amd) {
-		define(['jquery'], factory);
-	} else {
-		factory(root.jQuery);
-	}
-}(this, function($) {
-	'use strict';
-
-	// ########################################################################
-	// Base object
-	// ########################################################################
-
-	/**
-	* Imp - Impromptu object - passing no params will not open, only return the instance
-	* @param message String/Object - String of html or Object of states
-	* @param options Object - Options to set the prompt
-	* @return Imp - the instance of this Impromptu object
-	*/
-	var Imp = function(message, options){
-		var t = this;
-		t.id = Imp.count++;
-
-		Imp.lifo.push(t);
-
-		if(message){
-			t.open(message, options);
-		}
-		return t;
-	};
-
-	// ########################################################################
-	// static properties and methods
-	// ########################################################################
-
-	/**
-	* defaults - the default options
-	*/
-	Imp.defaults = {
-		prefix:'jqi',
-		classes: {
-			box: '',
-			fade: '',
-			prompt: '',
-			form: '',
-			close: '',
-			title: '',
-			message: '',
-			buttons: '',
-			button: '',
-			defaultButton: ''
-		},
-		title: '',
-		closeText: '&times;',
-		buttons: {
-			Ok: true
-		},
-		buttonTimeout: 1000,
-		loaded: function(e){},
-		submit: function(e,v,m,f){},
-		close: function(e,v,m,f){},
-		statechanging: function(e, from, to){},
-		statechanged: function(e, to){},
-		opacity: 0.6,
-		zIndex: 999,
-		overlayspeed: 'slow',
-		promptspeed: 'fast',
-		show: 'fadeIn',
-		hide: 'fadeOut',
-		focus: 0,
-		defaultButton: 0,
-		useiframe: false,
-		top: '15%',
-		position: {
-			container: null,
-			x: null,
-			y: null,
-			arrow: null,
-			width: null
-		},
-		persistent: true,
-		timeout: 0,
-		states: {},
-		initialState: 0,
-		state: {
-			name: null,
-			title: '',
-			html: '',
-			buttons: {
-				Ok: true
-			},
-			focus: 0,
-			defaultButton: 0,
-			position: {
-				container: null,
-				x: null,
-				y: null,
-				arrow: null,
-				width: null
-			},
-			submit: function(e,v,m,f){
-				return true;
-			}
-		}
-	};
-
-	/**
-	* setDefaults - Sets the default options
-	* @param o Object - Options to set as defaults
-	* @return void
-	*/
-	Imp.setDefaults = function(o) {
-		Imp.defaults = $.extend({}, Imp.defaults, o);
-	};
-
-	/**
-	* setStateDefaults - Sets the default options for a state
-	* @param o Object - Options to set as defaults
-	* @return void
-	*/
-	Imp.setStateDefaults = function(o) {
-		Imp.defaults.state = $.extend({}, Imp.defaults.state, o);
-	};
-
-	/**
-	* @var Int - A counter used to provide a unique ID for new prompts
-	*/
-	Imp.count = 0;
-
-	/**
-	* @var Array - An array of Impromptu intances in a LIFO queue (last in first out)
-	*/
-	Imp.lifo = [];
-
-	/**
-	* getLast - get the last element from the queue (doesn't pop, just returns)
-	* @return Imp - the instance of this Impromptu object or false if queue is empty
-	*/
-	Imp.getLast = function(){
-		var l = Imp.lifo.length;
-		return (l > 0)? Imp.lifo[l-1] : false;
-	};
-
-	/**
-	* removeFromStack - remove an element from the lifo stack by its id
-	* @param id int - id of the instance to remove
-	* @return api - The api of the element removed from the stack or void
-	*/
-	Imp.removeFromStack = function(id){
-		for(var i=Imp.lifo.length-1; i>=0; i--){
-			if(Imp.lifo[i].id === id){
-				return Imp.lifo.splice(i,1)[0];
-			}
-		}
-	};
-
-	// ########################################################################
-	// extend our object instance properties and methods
-	// ########################################################################
-	Imp.prototype = {
-
-		/**
-		* @var Int - A unique id, simply an autoincremented number
-		*/
-		id: null,
-
-		/**
-		* open - Opens the prompt
-		* @param message String/Object - String of html or Object of states
-		* @param options Object - Options to set the prompt
-		* @return Imp - the instance of this Impromptu object
-		*/
-		open: function(message, options) {
-			var t = this;
-
-			t.options = $.extend({},Imp.defaults,options);
-
-			// Be sure any previous timeouts are destroyed
-			if(t.timeout){
-				clearTimeout(t.timeout);
-			}
-			t.timeout = false;
-
-			var opts = t.options,
-				$body = $(document.body),
-				$window = $(window);
-
-			//build the box and fade
-			var msgbox = '<div class="'+ opts.prefix +'box '+ opts.classes.box +'">';
-			if(opts.useiframe && ($('object, applet').length > 0)) {
-				msgbox += '<iframe src="javascript:false;" class="'+ opts.prefix +'fade '+ opts.classes.fade +'"></iframe>';
-			} else {
-				msgbox += '<div class="'+ opts.prefix +'fade '+ opts.classes.fade +'"></div>';
-			}
-			msgbox += '<div class="'+ opts.prefix +' '+ opts.classes.prompt +'">'+
-						'<form action="#" class="'+ opts.prefix +'form '+ opts.classes.form +'">'+
-							'<div class="'+ opts.prefix +'close '+ opts.classes.close +'">'+ opts.closeText +'</div>'+
-							'<div class="'+ opts.prefix +'states"></div>'+
-						'</form>'+
-					'</div>'+
-				'</div>';
-
-			t.jqib = $(msgbox).appendTo($body);
-			t.jqi = t.jqib.children('.'+ opts.prefix);
-			t.jqif = t.jqib.children('.'+ opts.prefix +'fade');
-
-			//if a string was passed, convert to a single state
-			if(message.constructor === String){
-				message = {
-					state0: {
-						title: opts.title,
-						html: message,
-						buttons: opts.buttons,
-						position: opts.position,
-						focus: opts.focus,
-						defaultButton: opts.defaultButton,
-						submit: opts.submit
-					}
-				};
-			}
-
-			//build the states
-			t.options.states = {};
-			var k,v;
-			for(k in message){
-				v = $.extend({},Imp.defaults.state,{name:k},message[k]);
-				t.addState(v.name, v);
-
-				if(t.currentStateName === ''){
-					t.currentStateName = v.name;
-				}
-			}
-
-			//Events
-			t.jqi.on('click', '.'+ opts.prefix +'buttons button', function(e){
-				var $t = $(this),
-					$state = $t.parents('.'+ opts.prefix +'state'),
-					statename = $state.data('jqi-name'),
-					stateobj = t.options.states[statename],
-					msg = $state.children('.'+ opts.prefix +'message'),
-					clicked = stateobj.buttons[$t.text()] || stateobj.buttons[$t.html()],
-					forminputs = {};
-
-				// disable for a moment to prevent multiple clicks
-				if(t.options.buttonTimeout > 0){
-					t.disableStateButtons(statename);
-					setTimeout(function(){
-						t.enableStateButtons(statename);
-					}, t.options.buttonTimeout);
-				}
-
-				// if for some reason we couldn't get the value
-				if(clicked === undefined){
-					for(var i in stateobj.buttons){
-						if(stateobj.buttons[i].title === $t.text() || stateobj.buttons[i].title === $t.html()){
-							clicked = stateobj.buttons[i].value;
-						}
-					}
-				}
-
-				//collect all form element values from all states.
-				$.each(t.jqi.children('form').serializeArray(),function(i,obj){
-					if (forminputs[obj.name] === undefined) {
-						forminputs[obj.name] = obj.value;
-					} else if (typeof forminputs[obj.name] === Array || typeof forminputs[obj.name] === 'object') {
-						forminputs[obj.name].push(obj.value);
-					} else {
-						forminputs[obj.name] = [forminputs[obj.name],obj.value];
-					}
-				});
-
-				// trigger an event
-				var promptsubmite = new $.Event('impromptu:submit');
-				promptsubmite.stateName = stateobj.name;
-				promptsubmite.state = $state;
-				$state.trigger(promptsubmite, [clicked, msg, forminputs]);
-
-				if(!promptsubmite.isDefaultPrevented()){
-					t.close(true, clicked,msg,forminputs);
-				}
-			});
-
-			// if the fade is clicked blink the prompt
-			var fadeClicked = function(){
-				if(opts.persistent){
-					var offset = (opts.top.toString().indexOf('%') >= 0? ($window.height()*(parseInt(opts.top,10)/100)) : parseInt(opts.top,10)),
-						top = parseInt(t.jqi.css('top').replace('px',''),10) - offset;
-
-					//$window.scrollTop(top);
-					$('html,body').animate({ scrollTop: top }, 'fast', function(){
-						var i = 0;
-						t.jqib.addClass(opts.prefix +'warning');
-						var intervalid = setInterval(function(){
-							t.jqib.toggleClass(opts.prefix +'warning');
-							if(i++ > 1){
-								clearInterval(intervalid);
-								t.jqib.removeClass(opts.prefix +'warning');
-							}
-						}, 100);
-					});
-				}
-				else {
-					t.close(true);
-				}
-			};
-
-			// listen for esc or tab keys
-			var keyDownEventHandler = function(e){
-				var key = (window.event) ? event.keyCode : e.keyCode;
-
-				//escape key closes
-				if(key === 27) {
-					fadeClicked();
-				}
-
-				//enter key pressed trigger the default button if its not on it, ignore if it is a textarea
-				if(key === 13){
-					var $defBtn = t.getCurrentState().find('.'+ opts.prefix +'defaultbutton');
-					var $tgt = $(e.target);
-
-					if($tgt.is('textarea,.'+opts.prefix+'button') === false && $defBtn.length > 0){
-						e.preventDefault();
-						$defBtn.click();
-					}
-				}
-
-				//constrain tabs, tabs should iterate through the state and not leave
-				if (key === 9){
-					var $inputels = $('input,select,textarea,button',t.getCurrentState());
-					var fwd = !e.shiftKey && e.target === $inputels[$inputels.length-1];
-					var back = e.shiftKey && e.target === $inputels[0];
-					if (fwd || back) {
-						setTimeout(function(){
-							if (!$inputels){
-								return;
-							}
-							var el = $inputels[back===true ? $inputels.length-1 : 0];
-
-							if (el){
-								el.focus();
-							}
-						},10);
-						return false;
-					}
-				}
-			};
-
-			t.position();
-			t.style();
-
-			// store copy of the window resize function for interal use only
-			t._windowResize = function(e){
-				t.position(e);
-			};
-			$window.resize({ animate: false }, t._windowResize);
-
-			t.jqif.click(fadeClicked);
-			t.jqi.find('.'+ opts.prefix +'close').click(function(){ t.close(); });
-			t.jqi.find('.'+ opts.prefix +'form').submit(function(){ return false; });
-			t.jqib.on("keydown",keyDownEventHandler)
-						.on('impromptu:loaded', opts.loaded)
-						.on('impromptu:close', opts.close)
-						.on('impromptu:statechanging', opts.statechanging)
-						.on('impromptu:statechanged', opts.statechanged);
-
-			// Show it
-			t.jqif[opts.show](opts.overlayspeed);
-			t.jqi[opts.show](opts.promptspeed, function(){
-
-				t.goToState(
-					isNaN(opts.initialState) ? opts.initialState : 
-						t.jqi.find('.'+ opts.prefix +'states .'+ opts.prefix +'state').eq(opts.initialState).data('jqi-name')
-				);
-
-				t.jqib.trigger('impromptu:loaded');
-			});
-
-			// Timeout
-			if(opts.timeout > 0){
-				t.timeout = setTimeout(function(){ t.close(true); },opts.timeout);
-			}
-
-			return t;
-		},
-
-		/**
-		* close - Closes the prompt
-		* @param callback Function - called when the transition is complete
-		* @param clicked String - value of the button clicked (only used internally)
-		* @param msg jQuery - The state message body (only used internally)
-		* @param forvals Object - key/value pairs of all form field names and values (only used internally)
-		* @return Imp - the instance of this Impromptu object
-		*/
-		close: function(callCallback, clicked, msg, formvals){
-			var t = this;
-			Imp.removeFromStack(t.id);
-
-			if(t.timeout){
-				clearTimeout(t.timeout);
-				t.timeout = false;
-			}
-
-			if(t.jqib){
-				t.jqib[t.options.hide]('fast',function(){
-					
-					t.jqib.trigger('impromptu:close', [clicked,msg,formvals]);
-					
-					t.jqib.remove();
-					
-					$(window).off('resize', t._windowResize);
-
-					if(typeof callCallback === 'function'){
-						callCallback();
-					}
-				});
-			}
-			t.currentStateName = "";
-
-			return t;
-		},
-
-		/**
-		* addState - Injects a state into the prompt
-		* @param statename String - Name of the state
-		* @param stateobj Object - options for the state
-		* @param afterState String - selector of the state to insert after
-		* @return jQuery - the newly created state
-		*/
-		addState: function(statename, stateobj, afterState) {
-			var t = this,
-				state = '',
-				$state = null,
-				arrow = '',
-				title = '',
-				opts = t.options,
-				$jqistates = t.jqi.find('.'+ opts.prefix +'states'),
-				buttons = [],
-				showHtml,defbtn,k,v,l,i=0;
-
-			stateobj = $.extend({},Imp.defaults.state, {name:statename}, stateobj);
-
-			if(stateobj.position.arrow !== null){
-				arrow = '<div class="'+ opts.prefix + 'arrow '+ opts.prefix + 'arrow'+ stateobj.position.arrow +'"></div>';
-			}
-			if(stateobj.title && stateobj.title !== ''){
-				title = '<div class="lead '+ opts.prefix + 'title '+ opts.classes.title +'">'+  stateobj.title +'</div>';
-			}
-
-			showHtml = stateobj.html;
-			if (typeof stateobj.html === 'function') {
-				showHtml = 'Error: html function must return text';
-			}
-
-			state += '<div class="'+ opts.prefix + 'state" data-jqi-name="'+ statename +'">'+
-						arrow + title +
-						'<div class="'+ opts.prefix +'message '+ opts.classes.message +'">' + showHtml +'</div>'+
-						'<div class="'+ opts.prefix +'buttons'+ ($.isEmptyObject(stateobj.buttons)? 'hide ':' ') + opts.classes.buttons +'">';
-
-			// state buttons may be in object or array, lets convert objects to arrays
-			if($.isArray(stateobj.buttons)){
-				buttons = stateobj.buttons;
-			}
-			else if($.isPlainObject(stateobj.buttons)){
-				for(k in stateobj.buttons){
-					if(stateobj.buttons.hasOwnProperty(k)){
-						buttons.push({ title: k, value: stateobj.buttons[k] });
-					}
-				}
-			}
-
-			// iterate over each button and create them
-			for(i=0, l=buttons.length; i<l; i++){
-				v = buttons[i],
-				defbtn = stateobj.focus === i || (isNaN(stateobj.focus) && stateobj.defaultButton === i) ? (opts.prefix + 'defaultbutton ' + opts.classes.defaultButton) : '';
-
-				state += '<button class="'+ opts.classes.button +' '+ opts.prefix + 'button '+ defbtn;
-
-				if(typeof v.classes !== "undefined"){
-					state += ' '+ ($.isArray(v.classes)? v.classes.join(' ') : v.classes) + ' ';
-				}
-
-				state += '" name="' + opts.prefix + '_' + statename + '_button' + v.title.replace(/[^a-z0-9]+/gi,'') + '" value="' + v.value + '">' + v.title + '</button>';
-			}
-			
-			state += '</div></div>';
-
-			$state = $(state).css({display:'none'});
-
-			$state.on('impromptu:submit', stateobj.submit);
-
-			if(afterState !== undefined){
-				t.getState(afterState).after($state);
-			}
-			else{
-				$jqistates.append($state);
-			}
-
-			t.options.states[statename] = stateobj;
-
-			return $state;
-		},
-
-		/**
-		* removeState - Removes a state from the prompt
-		* @param state String - Name of the state
-		* @param newState String - Name of the state to transition to
-		* @return Boolean - returns true on success, false on failure
-		*/
-		removeState: function(state, newState) {
-			var t = this,
-				$state = t.getState(state),
-				rm = function(){ $state.remove(); };
-
-			if($state.length === 0){
-				return false;
-			}
-
-			// transition away from it before deleting
-			if($state.css('display') !== 'none'){
-				if(newState !== undefined && t.getState(newState).length > 0){
-					t.goToState(newState, false, rm);
-				}
-				else if($state.next().length > 0){
-					t.nextState(rm);
-				}
-				else if($state.prev().length > 0){
-					t.prevState(rm);
-				}
-				else{
-					t.close();
-				}
-			}
-			else{
-				$state.slideUp('slow', rm);
-			}
-
-			return true;
-		},
-
-		/**
-		* getApi - Get the api, so you can extract it from $.prompt stack
-		* @return jQuery - the prompt
-		*/
-		getApi: function() {
-			return this;
-		},
-
-		/**
-		* getBox - Get the box containing fade and prompt
-		* @return jQuery - the prompt
-		*/
-		getBox: function() {
-			return this.jqib;
-		},
-
-		/**
-		* getPrompt - Get the prompt
-		* @return jQuery - the prompt
-		*/
-		getPrompt: function() {
-			return this.jqi;
-		},
-
-		/**
-		* getState - Get the state by its name
-		* @param statename String - Name of the state
-		* @return jQuery - the state
-		*/
-		getState: function(statename) {
-			return this.jqi.find('[data-jqi-name="'+ statename +'"]');
-		},
-
-		/**
-		* getCurrentState - Get the current visible state
-		* @return jQuery - the current visible state
-		*/
-		getCurrentState: function() {
-			return this.getState(this.getCurrentStateName());
-		},
-
-		/**
-		* getCurrentStateName - Get the name of the current visible state/substate
-		* @return String - the current visible state's name
-		*/
-		getCurrentStateName: function() {
-			return this.currentStateName;
-		},
-
-		/**
-		* disableStateButtons - Disables the buttons in a state
-		* @param statename String - Name of the state containing buttons
-		* @param buttons Array - Array of button values to disable. By default all are disabled
-		* @param enable Boolean - True to enable the buttons instead of disabling (internally use only)
-		* @return Void
-		*/
-		disableStateButtons: function(statename, buttons, enable) {
-			var t = this;
-
-			if($.isArray(statename)){
-				buttons = statename;
-				statename = null;
-			}
-			
-			t.getState(statename || t.getCurrentStateName()).find('.'+ t.options.prefix + 'button').each(function(i,btn){
-				if(buttons === undefined || $.inArray(btn.value, buttons) !== -1){
-					btn.disabled = !enable;
-				}
-			});
-		},
-
-		/**
-		* enableStateButtons - Enables the buttons in a state
-		* @param statename String - Name of the state containing buttons. Defaults to current state
-		* @param buttons Array - Array of button values to enable. By default all are enabled
-		* @return Void
-		*/
-		enableStateButtons: function(statename, buttons) {
-			this.disableStateButtons(statename, buttons, true);
-		},
-
-		/**
-		* position - Repositions the prompt (Used internally)
-		* @return void
-		*/
-		position: function(e){
-			var t = this,
-				restoreFx = $.fx.off,
-				$state = t.getCurrentState(),
-				stateObj = t.options.states[$state.data('jqi-name')],
-				pos = stateObj? stateObj.position : undefined,
-				$window = $(window),
-				bodyHeight = document.body.scrollHeight, //$(document.body).outerHeight(true),
-				windowHeight = $(window).height(),
-				documentHeight = $(document).height(),
-				height = (bodyHeight > windowHeight) ? bodyHeight : windowHeight,
-				scrollTop = parseInt($window.scrollTop(),10),
-				top = scrollTop + (t.options.top.toString().indexOf('%') >= 0?
-						(windowHeight*(parseInt(t.options.top,10)/100)) : parseInt(t.options.top,10));
-
-			// when resizing the window turn off animation
-			if(e !== undefined && e.data.animate === false){
-				$.fx.off = true;
-			}
-
-			t.jqib.css({
-				position: "absolute",
-				height: height,
-				width: "100%",
-				top: 0,
-				left: 0,
-				right: 0,
-				bottom: 0
-			});
-			t.jqif.css({
-				position: "fixed",
-				height: height,
-				width: "100%",
-				top: 0,
-				left: 0,
-				right: 0,
-				bottom: 0
-			});
-
-			// tour positioning
-			if(pos && pos.container){
-				var offset = $(pos.container).offset(),
-					hasScrolled = false;
-					
-				if($.isPlainObject(offset) && offset.top !== undefined){
-					top = (offset.top + pos.y) - (t.options.top.toString().indexOf('%') >= 0? (windowHeight*(parseInt(t.options.top,10)/100)) : parseInt(t.options.top,10));
-
-					t.jqi.css({
-						position: "absolute"
-					});
-					t.jqi.animate({
-						top: offset.top + pos.y,
-						left: offset.left + pos.x,
-						marginLeft: 0,
-						width: (pos.width !== undefined)? pos.width : null
-					}, function(){
-						// if it didn't scroll before, check that the bottom is within view. Since width 
-						// is animated we must use the callback before we know the height
-						if(!hasScrolled && (offset.top + pos.y + t.jqi.outerHeight(true)) > (scrollTop + windowHeight)){
-							$('html,body').animate({ scrollTop: top }, 'slow', 'swing', function(){});
-							hasScrolled = true;
-						}
-					});
-
-					// scroll if the top is out of the viewing area
-					if(top < scrollTop || top > scrollTop + windowHeight){
-						$('html,body').animate({ scrollTop: top }, 'slow', 'swing', function(){});
-						hasScrolled = true;
-					}
-				}
-			}
-			// custom state width animation
-			else if(pos && pos.width){
-				t.jqi.css({
-						position: "absolute",
-						left: '50%'
-					});
-				t.jqi.animate({
-						top: pos.y || top,
-						left: pos.x || '50%',
-						marginLeft: ((pos.width/2)*-1),
-						width: pos.width
-					});
-			}
-			// standard prompt positioning
-			else{
-				t.jqi.css({
-					position: "absolute",
-					top: top,
-					left: '50%',//$window.width()/2,
-					marginLeft: ((t.jqi.outerWidth(false)/2)*-1)
-				});
-			}
-
-			// restore fx settings
-			if(e !== undefined && e.data.animate === false){
-				$.fx.off = restoreFx;
-			}
-		},
-
-		/**
-		* style - Restyles the prompt (Used internally)
-		* @return void
-		*/
-		style: function(){
-			var t = this;
-			
-			t.jqif.css({
-				zIndex: t.options.zIndex,
-				display: "none",
-				opacity: t.options.opacity
-			});
-			t.jqi.css({
-				zIndex: t.options.zIndex+1,
-				display: "none"
-			});
-			t.jqib.css({
-				zIndex: t.options.zIndex
-			});
-		},
-
-		/**
-		* goToState - Goto the specified state
-		* @param state String - name of the state to transition to
-		* @param subState Boolean - true to be a sub state within the currently open state
-		* @param callback Function - called when the transition is complete
-		* @return jQuery - the newly active state
-		*/
-		goToState: function(state, subState, callback) {
-			var t = this,
-				$jqi = t.jqi,
-				jqiopts = t.options,
-				$state = t.getState(state),
-				stateobj = jqiopts.states[$state.data('jqi-name')],
-				promptstatechanginge = new $.Event('impromptu:statechanging'),
-				opts = t.options;
-
-			if(stateobj !== undefined){
-
-
-				if (typeof stateobj.html === 'function') {
-					var contentLaterFunc = stateobj.html;
-					$state.find('.' + opts.prefix +'message ').html(contentLaterFunc());
-				}
-
-				// subState can be ommitted
-				if(typeof subState === 'function'){
-					callback = subState;
-					subState = false;
-				}
-
-				t.jqib.trigger(promptstatechanginge, [t.getCurrentStateName(), state]);
-
-				if(!promptstatechanginge.isDefaultPrevented() && $state.length > 0){
-					t.jqi.find('.'+ opts.prefix +'parentstate').removeClass(opts.prefix +'parentstate');
-
-					if(subState){ // hide any open substates
-						// get rid of any substates
-						t.jqi.find('.'+ opts.prefix +'substate').not($state)
-							.slideUp(jqiopts.promptspeed)
-							.removeClass('.'+ opts.prefix +'substate')
-							.find('.'+ opts.prefix +'arrow').hide();
-
-						// add parent state class so it can be visible, but blocked
-						t.jqi.find('.'+ opts.prefix +'state:visible').addClass(opts.prefix +'parentstate');
-
-						// add substate class so we know it will be smaller
-						$state.addClass(opts.prefix +'substate');
-					}
-					else{ // hide any open states
-						t.jqi.find('.'+ opts.prefix +'state').not($state)
-							.slideUp(jqiopts.promptspeed)
-							.find('.'+ opts.prefix +'arrow').hide();
-					}
-					t.currentStateName = stateobj.name;
-
-					$state.slideDown(jqiopts.promptspeed,function(){
-						var $t = $(this);
-						t.enableStateButtons();
-						
-						// if focus is a selector, find it, else its button index
-						if(typeof(stateobj.focus) === 'string'){
-							$t.find(stateobj.focus).eq(0).focus();
-						}
-						else{
-							$t.find('.'+ opts.prefix +'defaultbutton').focus();
-						}
-
-						$t.find('.'+ opts.prefix +'arrow').show(jqiopts.promptspeed);
-
-						if (typeof callback === 'function'){
-							t.jqib.on('impromptu:statechanged', callback);
-						}
-						t.jqib.trigger('impromptu:statechanged', [state]);
-						if (typeof callback === 'function'){
-							t.jqib.off('impromptu:statechanged', callback);
-						}
-					});
-					if(!subState){
-						t.position();
-					}
-				} // end isDefaultPrevented()	
-			}// end stateobj !== undefined
-
-			return $state;
-		},
-
-		/**
-		* nextState - Transition to the next state
-		* @param callback Function - called when the transition is complete
-		* @return jQuery - the newly active state
-		*/
-		nextState: function(callback) {
-			var t = this,
-				$next = t.getCurrentState().next();
-			if($next.length > 0){
-				t.goToState( $next.data('jqi-name'), callback );
-			}
-			return $next;
-		},
-
-		/**
-		* prevState - Transition to the previous state
-		* @param callback Function - called when the transition is complete
-		* @return jQuery - the newly active state
-		*/
-		prevState: function(callback) {
-			var t = this,
-				$prev = t.getCurrentState().prev();
-			if($prev.length > 0){
-				t.goToState( $prev.data('jqi-name'), callback );
-			}
-			return $prev;
-		}
-
-	};
-
-	// ########################################################################
-	// $.prompt will manage a queue of Impromptu instances
-	// ########################################################################
-
-	/**
-	* $.prompt create a new Impromptu instance and push it on the stack of instances
-	* @param message String/Object - String of html or Object of states
-	* @param options Object - Options to set the prompt
-	* @return jQuery - the jQuery object of the prompt within the modal
-	*/
-	$.prompt = function(message, options){
-		var api = new Imp(message, options);
-		return api.jqi;
-	};
-
-	/**
-	* Copy over static methods
-	*/
-	$.each(Imp, function(k,v){
-		$.prompt[k] = v;
-	});
-
-	/**
-	* Create a proxy for accessing all instance methods. The close method pops from queue.
-	*/
-	$.each(Imp.prototype, function(k,v){
-		$.prompt[k] = function(){
-			var api = Imp.getLast(); // always use the last instance on the stack
-
-			if(api && typeof api[k] === "function"){
-				return api[k].apply(api, arguments);
-			}
-		};
-	});
-
-	// ########################################################################
-	// jQuery Plugin and public access
-	// ########################################################################
-
-	/**
-	* Enable using $('.selector').prompt({});
-	* This will grab the html within the prompt as the prompt message
-	*/
-	$.fn.prompt = function(options){
-		if(options === undefined){
-			options = {};
-		}
-		if(options.withDataAndEvents === undefined){
-			options.withDataAndEvents = false;
-		}
-
-		$.prompt($(this).clone(options.withDataAndEvents).html(),options);
-	};
-
-	/**
-	* Export it as Impromptu and $.prompt
-	* Can be used from here forth as new Impromptu(states, opts)
-	*/
-	window.Impromptu = Imp;
-
-}));
-
 /*!
- * jQuery Cookie Plugin v1.4.1
- * https://github.com/carhartl/jquery-cookie
+ * JavaScript Cookie v2.1.4
+ * https://github.com/js-cookie/js-cookie
  *
- * Copyright 2013 Klaus Hartl
+ * Copyright 2006, 2015 Klaus Hartl & Fagner Brack
  * Released under the MIT license
  */
-(function (factory) {
+;(function (factory) {
+	var registeredInModuleLoader = false;
 	if (typeof define === 'function' && define.amd) {
-		// AMD
-		define(['jquery'], factory);
-	} else if (typeof exports === 'object') {
-		// CommonJS
-		factory(require('jquery'));
-	} else {
-		// Browser globals
-		factory(jQuery);
+		define(factory);
+		registeredInModuleLoader = true;
 	}
-}(function ($) {
-
-	var pluses = /\+/g;
-
-	function encode(s) {
-		return config.raw ? s : encodeURIComponent(s);
+	if (typeof exports === 'object') {
+		module.exports = factory();
+		registeredInModuleLoader = true;
 	}
-
-	function decode(s) {
-		return config.raw ? s : decodeURIComponent(s);
+	if (!registeredInModuleLoader) {
+		var OldCookies = window.Cookies;
+		var api = window.Cookies = factory();
+		api.noConflict = function () {
+			window.Cookies = OldCookies;
+			return api;
+		};
 	}
-
-	function stringifyCookieValue(value) {
-		return encode(config.json ? JSON.stringify(value) : String(value));
-	}
-
-	function parseCookieValue(s) {
-		if (s.indexOf('"') === 0) {
-			// This is a quoted cookie as according to RFC2068, unescape...
-			s = s.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-		}
-
-		try {
-			// Replace server-side written pluses with spaces.
-			// If we can't decode the cookie, ignore it, it's unusable.
-			// If we can't parse the cookie, ignore it, it's unusable.
-			s = decodeURIComponent(s.replace(pluses, ' '));
-			return config.json ? JSON.parse(s) : s;
-		} catch(e) {}
-	}
-
-	function read(s, converter) {
-		var value = config.raw ? s : parseCookieValue(s);
-		return $.isFunction(converter) ? converter(value) : value;
-	}
-
-	var config = $.cookie = function (key, value, options) {
-
-		// Write
-
-		if (value !== undefined && !$.isFunction(value)) {
-			options = $.extend({}, config.defaults, options);
-
-			if (typeof options.expires === 'number') {
-				var days = options.expires, t = options.expires = new Date();
-				t.setTime(+t + days * 864e+5);
-			}
-
-			return (document.cookie = [
-				encode(key), '=', stringifyCookieValue(value),
-				options.expires ? '; expires=' + options.expires.toUTCString() : '', // use expires attribute, max-age is not supported by IE
-				options.path    ? '; path=' + options.path : '',
-				options.domain  ? '; domain=' + options.domain : '',
-				options.secure  ? '; secure' : ''
-			].join(''));
-		}
-
-		// Read
-
-		var result = key ? undefined : {};
-
-		// To prevent the for loop in the first place assign an empty array
-		// in case there are no cookies at all. Also prevents odd result when
-		// calling $.cookie().
-		var cookies = document.cookie ? document.cookie.split('; ') : [];
-
-		for (var i = 0, l = cookies.length; i < l; i++) {
-			var parts = cookies[i].split('=');
-			var name = decode(parts.shift());
-			var cookie = parts.join('=');
-
-			if (key && key === name) {
-				// If second argument (value) is a function it's a converter...
-				result = read(cookie, value);
-				break;
-			}
-
-			// Prevent storing a cookie that we couldn't decode.
-			if (!key && (cookie = read(cookie)) !== undefined) {
-				result[name] = cookie;
+}(function () {
+	function extend () {
+		var i = 0;
+		var result = {};
+		for (; i < arguments.length; i++) {
+			var attributes = arguments[ i ];
+			for (var key in attributes) {
+				result[key] = attributes[key];
 			}
 		}
-
 		return result;
-	};
+	}
 
-	config.defaults = {};
+	function init (converter) {
+		function api (key, value, attributes) {
+			var result;
+			if (typeof document === 'undefined') {
+				return;
+			}
 
-	$.removeCookie = function (key, options) {
-		if ($.cookie(key) === undefined) {
-			return false;
+			// Write
+
+			if (arguments.length > 1) {
+				attributes = extend({
+					path: '/'
+				}, api.defaults, attributes);
+
+				if (typeof attributes.expires === 'number') {
+					var expires = new Date();
+					expires.setMilliseconds(expires.getMilliseconds() + attributes.expires * 864e+5);
+					attributes.expires = expires;
+				}
+
+				// We're using "expires" because "max-age" is not supported by IE
+				attributes.expires = attributes.expires ? attributes.expires.toUTCString() : '';
+
+				try {
+					result = JSON.stringify(value);
+					if (/^[\{\[]/.test(result)) {
+						value = result;
+					}
+				} catch (e) {}
+
+				if (!converter.write) {
+					value = encodeURIComponent(String(value))
+						.replace(/%(23|24|26|2B|3A|3C|3E|3D|2F|3F|40|5B|5D|5E|60|7B|7D|7C)/g, decodeURIComponent);
+				} else {
+					value = converter.write(value, key);
+				}
+
+				key = encodeURIComponent(String(key));
+				key = key.replace(/%(23|24|26|2B|5E|60|7C)/g, decodeURIComponent);
+				key = key.replace(/[\(\)]/g, escape);
+
+				var stringifiedAttributes = '';
+
+				for (var attributeName in attributes) {
+					if (!attributes[attributeName]) {
+						continue;
+					}
+					stringifiedAttributes += '; ' + attributeName;
+					if (attributes[attributeName] === true) {
+						continue;
+					}
+					stringifiedAttributes += '=' + attributes[attributeName];
+				}
+				return (document.cookie = key + '=' + value + stringifiedAttributes);
+			}
+
+			// Read
+
+			if (!key) {
+				result = {};
+			}
+
+			// To prevent the for loop in the first place assign an empty array
+			// in case there are no cookies at all. Also prevents odd result when
+			// calling "get()"
+			var cookies = document.cookie ? document.cookie.split('; ') : [];
+			var rdecode = /(%[0-9A-Z]{2})+/g;
+			var i = 0;
+
+			for (; i < cookies.length; i++) {
+				var parts = cookies[i].split('=');
+				var cookie = parts.slice(1).join('=');
+
+				if (cookie.charAt(0) === '"') {
+					cookie = cookie.slice(1, -1);
+				}
+
+				try {
+					var name = parts[0].replace(rdecode, decodeURIComponent);
+					cookie = converter.read ?
+						converter.read(cookie, name) : converter(cookie, name) ||
+						cookie.replace(rdecode, decodeURIComponent);
+
+					if (this.json) {
+						try {
+							cookie = JSON.parse(cookie);
+						} catch (e) {}
+					}
+
+					if (key === name) {
+						result = cookie;
+						break;
+					}
+
+					if (!key) {
+						result[name] = cookie;
+					}
+				} catch (e) {}
+			}
+
+			return result;
 		}
 
-		// Must not alter options, thus extending a fresh object...
-		$.cookie(key, '', $.extend({}, options, { expires: -1 }));
-		return !$.cookie(key);
-	};
+		api.set = api;
+		api.get = function (key) {
+			return api.call(api, key);
+		};
+		api.getJSON = function () {
+			return api.apply({
+				json: true
+			}, [].slice.call(arguments));
+		};
+		api.defaults = {};
 
+		api.remove = function (key, attributes) {
+			api(key, '', extend(attributes, {
+				expires: -1
+			}));
+		};
+
+		api.withConverter = init;
+
+		return api;
+	}
+
+	return init(function () {});
 }));

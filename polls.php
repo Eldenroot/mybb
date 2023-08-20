@@ -29,6 +29,7 @@ if($mybb->user['uid'] != 0)
 }
 else
 {
+	$username = '';
 	eval("\$loginbox = \"".$templates->get("loginbox")."\";");
 }
 
@@ -52,7 +53,7 @@ if($mybb->input['action'] == "newpoll")
 	$plugins->run_hooks("polls_newpoll_start");
 
 	$thread = get_thread($mybb->get_input('tid', MyBB::INPUT_INT));
-	if(!$thread)
+	if(!$thread || $thread['visible'] == -1)
 	{
 		error($lang->error_invalidthread);
 	}
@@ -690,8 +691,8 @@ if($mybb->input['action'] == "do_editpoll" && $mybb->request_method == "post")
 			{
 				$votes[$i] = "0";
 			}
-			$voteslist .= $votes[$i];
-			$numvotes = $numvotes + $votes[$i];
+			$voteslist .= (int)$votes[$i];
+			$numvotes = (int)$numvotes + (int)$votes[$i];
 		}
 	}
 
@@ -751,7 +752,7 @@ if($mybb->input['action'] == "showresults")
 
 	$tid = $poll['tid'];
 	$thread = get_thread($tid);
-	if(!$thread)
+	if(!$thread || ($thread['visible'] != 1 && ($thread['visible'] == 0 && !is_moderator($thread['fid'], "canviewunapprove")) || ($thread['visible'] == -1 && !is_moderator($thread['fid'], "canviewdeleted"))))
 	{
 		error($lang->error_invalidthread);
 	}
@@ -779,7 +780,7 @@ if($mybb->input['action'] == "showresults")
 	add_breadcrumb(htmlspecialchars_uni($thread['subject']), get_thread_link($thread['tid']));
 	add_breadcrumb($lang->nav_pollresults);
 
-	$voters = $votedfor = array();
+	$voters = $votedfor = $guest_voters = array();
 
 	// Calculate votes
 	$query = $db->query("
@@ -801,7 +802,14 @@ if($mybb->input['action'] == "showresults")
 		if($voter['uid'] == 0 || $voter['username'] == '')
 		{
 			// Add one to the number of voters for guests
-			++$guest_voters[$voter['voteoption']];
+			if(isset($guest_voters[$voter['voteoption']]))
+			{
+				++$guest_voters[$voter['voteoption']];
+			}
+			else
+			{
+				$guest_voters[$voter['voteoption']] = 1;
+			}
 		}
 		else
 		{
@@ -899,6 +907,7 @@ if($mybb->input['action'] == "showresults")
 	eval("\$showresults = \"".$templates->get("polls_showresults")."\";");
 	output_page($showresults);
 }
+
 if($mybb->input['action'] == "vote" && $mybb->request_method == "post")
 {
 	// Verify incoming POST request
@@ -916,10 +925,9 @@ if($mybb->input['action'] == "vote" && $mybb->request_method == "post")
 
 	$poll['timeout'] = $poll['timeout']*60*60*24;
 
-	$query = $db->simple_select("threads", "*", "poll='".(int)$poll['pid']."'");
-	$thread = $db->fetch_array($query);
+	$thread = get_thread($poll['tid']);
 
-	if(!$thread || $thread['visible'] == 0)
+	if(!$thread || ($thread['visible'] != 1 && ($thread['visible'] == 0 && !is_moderator($thread['fid'], "canviewunapprove")) || ($thread['visible'] == -1 && !is_moderator($thread['fid'], "canviewdeleted"))))
 	{
 		error($lang->error_invalidthread);
 	}
@@ -962,32 +970,22 @@ if($mybb->input['action'] == "vote" && $mybb->request_method == "post")
 	// Check if the user has voted before...
 	if($mybb->user['uid'])
 	{
-		$query = $db->simple_select("pollvotes", "*", "uid='".$mybb->user['uid']."' AND pid='".$poll['pid']."'");
-		$votecheck = $db->fetch_array($query);
+		$user_check = "uid='{$mybb->user['uid']}'";
+	}
+	else
+	{
+		$user_check = "ipaddress=".$db->escape_binary($session->packedip);
 	}
 
-	if($votecheck['vid'] || (isset($mybb->cookies['pollvotes'][$poll['pid']]) && $mybb->cookies['pollvotes'][$poll['pid']] !== ""))
+	$query = $db->simple_select("pollvotes", "*", "{$user_check} AND pid='".$poll['pid']."'");
+	$votecheck = $db->fetch_array($query);
+
+	if(!empty($votecheck['vid']))
 	{
 		error($lang->error_alreadyvoted);
 	}
-	elseif(!$mybb->user['uid'])
-	{
-		// Give a cookie to guests to inhibit revotes
-		if(is_array($mybb->input['option']))
-		{
-			// We have multiple options here...
-			$votes_cookie = implode(',', array_keys($mybb->input['option']));
-		}
-		else
-		{
-			$votes_cookie = $mybb->input['option'];
-		}
 
-		my_setcookie("pollvotes[{$poll['pid']}]", $votes_cookie);
-	}
-
-	$votesql = '';
-	$now = TIME_NOW;
+	$votesql = array();
 	$votesarray = explode("||~|~||", $poll['votes']);
 	$option = $mybb->input['option'];
 	$numvotes = (int)$poll['numvotes'];
@@ -1001,11 +999,14 @@ if($mybb->input['action'] == "vote" && $mybb->request_method == "post")
 			{
 				if($vote == 1 && isset($votesarray[$voteoption-1]))
 				{
-					if($votesql)
-					{
-						$votesql .= ",";
-					}
-					$votesql .= "('".$poll['pid']."','".$mybb->user['uid']."','".$db->escape_string($voteoption)."','$now')";
+					$votesql[] = array(
+						"pid" => $poll['pid'],
+						"uid" => (int)$mybb->user['uid'],
+						"voteoption" => $db->escape_string($voteoption),
+						"dateline" => TIME_NOW,
+						"ipaddress" => $db->escape_binary($session->packedip)
+					);
+
 					$votesarray[$voteoption-1]++;
 					$numvotes = $numvotes+1;
 					$total_options++;
@@ -1024,7 +1025,15 @@ if($mybb->input['action'] == "vote" && $mybb->request_method == "post")
 		{
 			error($lang->error_nopolloptions);
 		}
-		$votesql = "('".$poll['pid']."','".$mybb->user['uid']."','".$db->escape_string($option)."','$now')";
+
+		$votesql = array(
+			"pid" => $poll['pid'],
+			"uid" => (int)$mybb->user['uid'],
+			"voteoption" => $db->escape_string($option),
+			"dateline" => TIME_NOW,
+			"ipaddress" => $db->escape_binary($session->packedip)
+		);
+
 		$votesarray[$option-1]++;
 		$numvotes = $numvotes+1;
 	}
@@ -1034,11 +1043,15 @@ if($mybb->input['action'] == "vote" && $mybb->request_method == "post")
 		error($lang->error_nopolloptions);
 	}
 
-	$db->write_query("
-		INSERT INTO
-		".TABLE_PREFIX."pollvotes (pid,uid,voteoption,dateline)
-		VALUES $votesql
-	");
+	if($poll['multiple'] == 1)
+	{
+		$db->insert_query_multiple("pollvotes", $votesql);
+	}
+	else
+	{
+		$db->insert_query("pollvotes", $votesql);
+	}
+
 	$voteslist = '';
 	for($i = 1; $i <= $poll['numoptions']; ++$i)
 	{
@@ -1086,7 +1099,7 @@ if($mybb->input['action'] == "do_undovote")
 	// We do not have $forum_cache available here since no forums permissions are checked in undo vote
 	// Get thread ID and then get forum info
 	$thread = get_thread($poll['tid']);
-	if(!$thread || $thread['visible'] == 0)
+	if(!$thread || ($thread['visible'] != 1 && ($thread['visible'] == 0 && !is_moderator($thread['fid'], "canviewunapprove")) || ($thread['visible'] == -1 && !is_moderator($thread['fid'], "canviewdeleted"))))
 	{
 		error($lang->error_invalidthread);
 	}
@@ -1120,35 +1133,32 @@ if($mybb->input['action'] == "do_undovote")
 
 	// Check if the user has voted before...
 	$vote_options = array();
+
 	if($mybb->user['uid'])
 	{
-		$query = $db->simple_select("pollvotes", "vid,voteoption", "uid='".$mybb->user['uid']."' AND pid='".$poll['pid']."'");
-		while($voteoption = $db->fetch_array($query))
-		{
-			$vote_options[$voteoption['vid']] = $voteoption['voteoption'];
-		}
+		$user_check = "uid='{$mybb->user['uid']}'";
 	}
-	elseif(isset($mybb->cookies['pollvotes'][$poll['pid']]))
+	else
 	{
-		// for Guests, we simply see if they've got the cookie
-		$vote_options = explode(',', $mybb->cookies['pollvotes'][$poll['pid']]);
+		$user_check = "uid='0' AND ipaddress=".$db->escape_binary($session->packedip);
+	}
+
+	$query = $db->simple_select("pollvotes", "vid,voteoption", "{$user_check} AND pid='".$poll['pid']."'");
+	while($voteoption = $db->fetch_array($query))
+	{
+		$vote_options[$voteoption['vid']] = $voteoption['voteoption'];
 	}
 
 	if(empty($vote_options))
 	{
 		error($lang->error_notvoted);
 	}
-	else if(!$mybb->user['uid'])
-	{
-		// clear cookie for Guests
-		my_setcookie("pollvotes[{$poll['pid']}]", "");
-	}
 
 	// Note, this is not thread safe!
 	$votesarray = explode("||~|~||", $poll['votes']);
 	if(count($votesarray) > $poll['numoptions'])
 	{
-		$votesarray = array_slice(0, $poll['numoptions']);
+		$votesarray = array_slice($votesarray, 0, $poll['numoptions']);
 	}
 
 	if($poll['multiple'] == 1)
@@ -1194,11 +1204,10 @@ if($mybb->input['action'] == "do_undovote")
 
 	$plugins->run_hooks("polls_do_undovote_process");
 
-	$db->delete_query("pollvotes", "uid='".$mybb->user['uid']."' AND pid='".$poll['pid']."'");
+	$db->delete_query("pollvotes", "{$user_check} AND pid='".$poll['pid']."'");
 	$db->update_query("polls", $updatedpoll, "pid='".$poll['pid']."'");
 
 	$plugins->run_hooks("polls_do_undovote_end");
 
 	redirect(get_thread_link($poll['tid']), $lang->redirect_unvoted);
 }
-

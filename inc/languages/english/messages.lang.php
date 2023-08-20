@@ -9,13 +9,14 @@ $l['click_no_wait'] = "Click here if you don't want to wait any longer.";
 $l['redirect_return_forum'] = "<br /><br />Alternatively, <a href=\"{1}\">return to the forum</a>.";
 $l['redirect_emailsent'] = "Your e-mail message has been sent successfully.";
 $l['redirect_loggedin'] = "You have successfully been logged in.<br />You will now be taken back to where you came from.";
-
+$l['update_confirm'] = "The following file(s) are already attached and will be updated / replaced with the newly selected one(s). {1} Are you sure?";
 $l['error_invalidpworusername'] = "You have entered an invalid username/password combination. <br /><br />If you have forgotten your password please <a href=\"member.php?action=lostpw\">retrieve a new one</a>.";
 $l['error_invalidpworusername1'] = "You have entered an invalid email/password combination. <br /><br />If you have forgotten your password please <a href=\"member.php?action=lostpw\">retrieve a new one</a>.";
 $l['error_invalidpworusername2'] = "You have entered an invalid username/password or email/password combination. <br /><br />If you have forgotten your password please <a href=\"member.php?action=lostpw\">retrieve a new one</a>.";
 $l['error_incompletefields'] = "It appears you have left one or more required fields blank. Please go back and enter the required fields.";
-$l['error_alreadyuploaded'] = "This post already contains an attachment with the same name. Please rename the file and upload it again. Alternatively you may click \"Update Attachment\".";
+$l['error_alreadyuploaded'] = "This post already contains an attachment with the name \"{1}\". Please rename the file and upload it again. Alternatively you may click \"Update Attachment\".";
 $l['error_alreadyuploaded_perm'] = "This post already contains an attachment with the same name. Please either remove the existing file or rename the file and upload it again.";
+$l['error_updatefailed'] = "The file \"{1}\" is not already attached and can not be updated.";
 $l['error_nomessage'] = "Sorry, we cannot proceed because you did not enter a valid message. Please go back and do so.";
 $l['error_invalidemail'] = "You did not enter a valid email address.";
 $l['error_nomember'] = "The member you specified is either invalid or doesn't exist.";
@@ -28,8 +29,8 @@ $l['error_invalidattachment'] = "The specified attachment does not exist.";
 $l['error_invalidforum'] = "Invalid forum";
 $l['error_closedinvalidforum'] = "You may not post in this forum because either the forum is closed, it is a redirect to another webpage, or it is a category.";
 $l['error_attachtype'] = "The type of file that you attached is not allowed. Please remove the attachment or choose a different type.";
-$l['error_attachsize'] = "The file you attached is too large. The maximum size for that type of file is {1} kilobytes.";
-$l['error_uploadempty'] = "The file specified is empty.";
+$l['error_attachsize'] = "The file \"{1}\" is too large. The maximum size for that type of file is {2} kilobytes.";
+$l['error_uploadempty'] = "The \"{1}\" file is empty.";
 $l['error_uploadsize'] = "The size of the uploaded file is too large.";
 $l['error_uploadfailed'] = "The file upload failed. Please choose a valid file and try again. ";
 $l['error_uploadfailed_detail'] = "Error details: ";
@@ -51,7 +52,7 @@ $l['error_invalidusername'] = "The username you have entered appears to be inval
 $l['error_invalidpassword'] = "The password you entered is incorrect. If you have forgotten your password, click <a href=\"member.php?action=lostpw\">here</a>. Otherwise, go back and try again.";
 $l['error_postflooding'] = "We are sorry but we cannot process your post. The administrator has specified you are only allowed to post once every {1} seconds.";
 $l['error_nopermission_guest_1'] = "You are either not logged in or do not have permission to view this page. This could be because one of the following reasons:";
-$l['error_nopermission_guest_2'] = "You are not logged in or registered. Please use the form at the bottom of this page to login.";
+$l['error_nopermission_guest_2'] = "You are not logged in or registered. Please login and retry the desired action.";
 $l['error_nopermission_guest_3'] = "You do not have permission to access this page. Are you trying to access administrative pages or a resource that you shouldn't be?  Check in the forum rules that you are allowed to perform this action.";
 $l['error_nopermission_guest_4'] = "Your account may have been disabled by an administrator, or it may be awaiting account activation.";
 $l['error_nopermission_guest_5'] = "You have accessed this page directly rather than using appropriate forms or links.";
@@ -82,6 +83,7 @@ $l['failed_login_wait'] = "You have failed to login within the required number o
 $l['failed_login_again'] = "<br />You have <strong>{1}</strong> more login attempts.";
 $l['error_max_emails_day'] = "You cannot use the 'Send Thread to a Friend' or the 'Email User' features because you've already used up your allocated quota of sending {1} messages in the past 24 hours.";
 $l['attachments_disabled'] = "You cannot use the attachment system as it has been disabled by the Administrator.";
+$l['error_attach_filename_length'] = "The file name '{1}' exceeds the maximum file name length {2}. Please upload a file with a shorter file name.";
 
 $l['emailsubject_lostpw'] = "Password Reset at {1}";
 $l['emailsubject_passwordreset'] = "New password at {1}";
@@ -98,7 +100,7 @@ $l['emailsubject_newpm'] = "New Private Message at {1} - {2}";
 $l['emailsubject_newjoinrequest'] = "New Join Request at {1}";
 $l['emailsubject_sendtofriend'] = "Interesting discussion at {1}";
 $l['emailsubject_changepassword'] = "Change of Password at {1}";
-$l['emailbit_viewthread'] = "... (visit the thread to read more..)";
+$l['emailbit_viewthread'] = "... (visit the thread to read more...)";
 
 $l['email_lostpw'] = "{1},
 
@@ -272,7 +274,7 @@ Thank you,
 Unsubscription Information:
 
 If you would not like to receive any more notifications of new threads in this forum, visit the following URL in your browser:
-{7}/usercp2.php?action=removesubscription&type=forum&fid={9}&my_post_key={10}
+{7}/usercp.php?action=removesubscription&type=forum&fid={9}
 
 ------------------------------------------";
 
@@ -348,7 +350,7 @@ Thank you,
 Unsubscription Information:
 
 If you would not like to receive any more notifications of replies to this thread, visit the following URL in your browser:
-{6}/usercp2.php?action=removesubscription&tid={8}&my_post_key={9}
+{6}/usercp.php?action=removesubscription&tid={8}
 
 ------------------------------------------";
 $l['email_reachedpmquota'] = "{1},
@@ -493,7 +495,7 @@ There may also be other replies to this thread but you will not receive anymore 
 Unsubscription Information:
 
 If you would not like to receive any more notifications of replies to this thread, visit the following URL in your browser:
-[url]{5}/usercp2.php?action=removesubscription&tid={7}&my_post_key={8}[/url]
+[url]{5}/usercp.php?action=removesubscription&tid={7}[/url]
 
 ------------------------------------------";
 

@@ -85,10 +85,10 @@ $tables[] = "CREATE TABLE mybb_attachments (
   pid int NOT NULL default '0',
   posthash varchar(50) NOT NULL default '',
   uid int NOT NULL default '0',
-  filename varchar(120) NOT NULL default '',
+  filename varchar(255) NOT NULL default '',
   filetype varchar(120) NOT NULL default '',
   filesize int NOT NULL default '0',
-  attachname varchar(120) NOT NULL default '',
+  attachname varchar(255) NOT NULL default '',
   downloads int NOT NULL default '0',
   dateuploaded int NOT NULL default '0',
   visible smallint NOT NULL default '0',
@@ -104,6 +104,7 @@ $tables[] = "CREATE TABLE mybb_attachtypes (
   maxsize int NOT NULL default '0',
   icon varchar(100) NOT NULL default '',
   enabled smallint NOT NULL default '1',
+  forcedownload smallint NOT NULL default '0',
   groups text NOT NULL default '-1',
   forums text NOT NULL default '-1',
   avatarfile smallint NOT NULL default '0',
@@ -124,6 +125,7 @@ $tables[] = "CREATE TABLE mybb_awaitingactivation (
 $tables[] = "CREATE TABLE mybb_badwords (
   bid serial,
   badword varchar(100) NOT NULL default '',
+  regex smallint NOT NULL default '0',
   replacement varchar(100) NOT NULL default '',
   PRIMARY KEY (bid)
 );";
@@ -302,7 +304,8 @@ $tables[] = "CREATE TABLE mybb_forums (
 $tables[] = "CREATE TABLE mybb_forumsread (
   fid int NOT NULL default '0',
   uid int NOT NULL default '0',
-  dateline int NOT NULL default '0'
+  dateline int NOT NULL default '0',
+  UNIQUE (fid, uid)
 );";
 
 $tables[] = "CREATE TABLE mybb_forumsubscriptions (
@@ -505,6 +508,7 @@ $tables[] = "CREATE TABLE mybb_pollvotes (
   uid int NOT NULL default '0',
   voteoption smallint NOT NULL default '0',
   dateline int NOT NULL default '0',
+  ipaddress bytea NOT NULL default '',
   PRIMARY KEY (vid)
 );";
 
@@ -884,7 +888,8 @@ $tables[] = "CREATE TABLE mybb_threads (
 $tables[] = "CREATE TABLE mybb_threadsread (
   tid int NOT NULL default '0',
   uid int NOT NULL default '0',
-  dateline int NOT NULL default '0'
+  dateline int NOT NULL default '0',
+  UNIQUE (tid, uid)
 );";
 
 $tables[] = "CREATE TABLE mybb_threadsubscriptions (
@@ -903,16 +908,6 @@ $tables[] = "CREATE TABLE mybb_userfields (
   fid3 text NOT NULL default '',
   PRIMARY KEY (ufid)
 );";
-$query = $db->write_query("SELECT column_name
-						  FROM information_schema.constraint_column_usage
-						  WHERE table_name = '".$config['tableprefix']."userfields'
-						  AND constraint_name = '".$config['tableprefix']."userfields_pkey'
-						  LIMIT 1");
-$main_field = $db->fetch_field($query, 'column_name');
-if(!empty($main_field))
-{
-	$tables[] = "DROP SEQUENCE mybb_userfields_ufid_seq;";
-}
 $tables[] = "CREATE SEQUENCE mybb_userfields_ufid_seq;";
 
 $tables[] = "CREATE TABLE mybb_usergroups (
@@ -974,6 +969,7 @@ $tables[] = "CREATE TABLE mybb_usergroups (
   canratemembers smallint NOT NULL default '0',
   canchangename smallint NOT NULL default '0',
   canbereported smallint NOT NULL default '0',
+  canbeinvisible smallint NOT NULL default '1',
   canchangewebsite smallint NOT NULL default '1',
   showforumteam smallint NOT NULL default '0',
   usereputationsystem smallint NOT NULL default '0',
@@ -1031,8 +1027,6 @@ $tables[] = "CREATE TABLE mybb_users (
   lastpost int NOT NULL default '0',
   website varchar(200) NOT NULL default '',
   icq varchar(10) NOT NULL default '',
-  aim varchar(50) NOT NULL default '',
-  yahoo varchar(50) NOT NULL default '',
   skype varchar(75) NOT NULL default '',
   google varchar(75) NOT NULL default '',
   birthday varchar(15) NOT NULL default '',
@@ -1091,7 +1085,8 @@ $tables[] = "CREATE TABLE mybb_users (
   suspendsigtime int NOT NULL default '0',
   coppauser smallint NOT NULL default '0',
   classicpostbit smallint NOT NULL default '0',
-  loginattempts smallint NOT NULL default '1',
+  loginattempts smallint NOT NULL default '0',
+  loginlockoutexpiry int NOT NULL default '0',
   usernotes text NOT NULL default '',
   sourceeditor smallint NOT NULL default '0',
   PRIMARY KEY (uid)
@@ -1138,5 +1133,4 @@ $tables[] = "CREATE TABLE mybb_warnings (
 	notes text NOT NULL default '',
 	PRIMARY KEY(wid)
 );";
-
 

@@ -65,6 +65,11 @@ class DefaultPage
 	public $show_post_verify_error = '';
 
 	/**
+	 * @var string
+	 */
+	public $_menu;
+
+	/**
 	 * Output the page header.
 	 *
 	 * @param string $title The title of the page.
@@ -98,7 +103,7 @@ class DefaultPage
 		echo "	<meta name=\"author\" content=\"MyBB Group\" />\n";
 		echo "	<meta name=\"copyright\" content=\"Copyright ".COPY_YEAR." MyBB Group.\" />\n";
 		echo "	<link rel=\"stylesheet\" href=\"styles/".$this->style."/main.css?ver=1813\" type=\"text/css\" />\n";
-		echo "	<link rel=\"stylesheet\" href=\"styles/".$this->style."/modal.css\" type=\"text/css\" />\n";
+		echo "	<link rel=\"stylesheet\" href=\"styles/".$this->style."/modal.css?ver=1813\" type=\"text/css\" />\n";
 
 		// Load stylesheet for this module if it has one
 		if(file_exists(MYBB_ADMIN_DIR."styles/{$this->style}/{$this->active_module}.css"))
@@ -106,16 +111,16 @@ class DefaultPage
 			echo "	<link rel=\"stylesheet\" href=\"styles/{$this->style}/{$this->active_module}.css\" type=\"text/css\" />\n";
 		}
 
-		echo "	<script type=\"text/javascript\" src=\"../jscripts/jquery.js\"></script>\n";
-		echo "	<script type=\"text/javascript\" src=\"../jscripts/jquery.plugins.min.js\"></script>\n";
-		echo "	<script type=\"text/javascript\" src=\"../jscripts/general.js?ver=1810\"></script>\n";
-		echo "	<script type=\"text/javascript\" src=\"./jscripts/admincp.js\"></script>\n";
+		echo "	<script type=\"text/javascript\" src=\"../jscripts/jquery.js?ver=1823\"></script>\n";
+		echo "	<script type=\"text/javascript\" src=\"../jscripts/jquery.plugins.min.js?ver=1821\"></script>\n";
+		echo "	<script type=\"text/javascript\" src=\"../jscripts/general.js?ver=1821\"></script>\n";
+		echo "	<script type=\"text/javascript\" src=\"./jscripts/admincp.js?ver=1821\"></script>\n";
 		echo "	<script type=\"text/javascript\" src=\"./jscripts/tabs.js\"></script>\n";
 
 		echo "	<link rel=\"stylesheet\" href=\"jscripts/jqueryui/css/redmond/jquery-ui.min.css\" />\n";
 		echo "	<link rel=\"stylesheet\" href=\"jscripts/jqueryui/css/redmond/jquery-ui.structure.min.css\" />\n";
 		echo "	<link rel=\"stylesheet\" href=\"jscripts/jqueryui/css/redmond/jquery-ui.theme.min.css\" />\n";
-		echo "	<script src=\"jscripts/jqueryui/js/jquery-ui.min.js?ver=1804\"></script>\n";
+		echo "	<script src=\"jscripts/jqueryui/js/jquery-ui.min.js?ver=1813\"></script>\n";
 
 		// Stop JS elements showing while page is loading (JS supported browsers only)
 		echo "  <style type=\"text/css\">.popup_button { display: none; } </style>\n";
@@ -226,7 +231,7 @@ lang.saved = \"{$lang->saved}\";
 		echo "	<br style=\"clear: both;\" />";
 		echo "	<br style=\"clear: both;\" />";
 		echo "	</div>\n";
-		echo "<div id=\"footer\"><p class=\"generation\">".$lang->sprintf($lang->generated_in, $totaltime, $debuglink, $querycount, $memory_usage)."</p><p class=\"powered\">Powered By <a href=\"https://mybb.com/\" target=\"_blank\">MyBB</a>, &copy; 2002-".COPY_YEAR." <a href=\"https://mybb.com/\" target=\"_blank\">MyBB Group</a>.</p></div>\n";
+		echo "<div id=\"footer\"><p class=\"generation\">".$lang->sprintf($lang->generated_in, $totaltime, $debuglink, $querycount, $memory_usage)."</p><p class=\"powered\">Powered By <a href=\"https://mybb.com/\" target=\"_blank\" rel=\"noopener\">MyBB</a>, &copy; 2002-".COPY_YEAR." <a href=\"https://mybb.com/\" target=\"_blank\" rel=\"noopener\">MyBB Group</a>.</p></div>\n";
 		if($mybb->debug_mode)
 		{
 			echo $db->explain;
@@ -378,12 +383,12 @@ lang.saved = \"{$lang->saved}\";
 
 		// If the language string for "Username" is too cramped then use this to define how much larger you want the gap to be (in px)
 		if(isset($lang->login_field_width))
-        {
-        	$login_label_width = " style=\"width: ".((int)$lang->login_field_width+100)."px;\"";
+		{
+			$login_label_width = " style=\"width: ".((int)$lang->login_field_width+100)."px;\"";
 			$login_container_width = " style=\"width: ".(410+((int)$lang->login_field_width))."px;\"";
-        }
+		}
 
-		$login_page .= <<<EOF
+		$login_page = <<<EOF
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en">
 <head profile="http://gmpg.org/xfn/1">
@@ -391,9 +396,9 @@ lang.saved = \"{$lang->saved}\";
 <meta name="author" content="MyBB Group" />
 <meta name="copyright" content="Copyright {$copy_year} MyBB Group." />
 <link rel="stylesheet" href="./styles/{$cp_style}/login.css" type="text/css" />
-<script type="text/javascript" src="../jscripts/jquery.js"></script>
-<script type="text/javascript" src="../jscripts/general.js?ver=1807"></script>
-<script type="text/javascript" src="./jscripts/admincp.js"></script>
+<script type="text/javascript" src="../jscripts/jquery.js?ver=1823"></script>
+<script type="text/javascript" src="../jscripts/general.js?ver=1821"></script>
+<script type="text/javascript" src="./jscripts/admincp.js?ver=1821"></script>
 <script type="text/javascript">
 //<![CDATA[
 	loading_text = '{$lang->loading_text}';
@@ -470,11 +475,11 @@ EOF;
 				break;
 		}
 
-       	$_SERVER['PHP_SELF'] = htmlspecialchars_uni($_SERVER['PHP_SELF']);
+       	$this_file = htmlspecialchars_uni($_SERVER['SCRIPT_NAME']);
 
 		$login_page .= <<<EOF
 		<p>{$login_lang_string}</p>
-		<form method="post" action="{$_SERVER['PHP_SELF']}{$query_string}">
+		<form method="post" action="{$this_file}{$query_string}">
 		<div class="form_container">
 
 			<div class="label"{$login_label_width}><label for="username">{$lang_username}</label></div>
@@ -515,6 +520,8 @@ EOF;
 	{
 		global $lang, $cp_style, $mybb;
 
+		$copy_year = COPY_YEAR;
+
 		$mybb2fa_page = <<<EOF
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en">
@@ -523,9 +530,9 @@ EOF;
 <meta name="author" content="MyBB Group" />
 <meta name="copyright" content="Copyright {$copy_year} MyBB Group." />
 <link rel="stylesheet" href="./styles/{$cp_style}/login.css" type="text/css" />
-<script type="text/javascript" src="../jscripts/jquery.js"></script>
-<script type="text/javascript" src="../jscripts/general.js?ver=1807"></script>
-<script type="text/javascript" src="./jscripts/admincp.js"></script>
+<script type="text/javascript" src="../jscripts/jquery.js?ver=1823"></script>
+<script type="text/javascript" src="../jscripts/general.js?ver=1821"></script>
+<script type="text/javascript" src="./jscripts/admincp.js?ver=1821"></script>
 <script type="text/javascript">
 //<![CDATA[
 	loading_text = '{$lang->loading_text}';
@@ -625,6 +632,15 @@ EOF;
 		global $lang, $mybb, $cp_style;
 
 		$copy_year = COPY_YEAR;
+
+		$login_label_width = "";
+
+		// If the language string for "Username" is too cramped then use this to define how much larger you want the gap to be (in px)
+		if(isset($lang->login_field_width))
+		{
+			$login_label_width = " style=\"width: ".((int)$lang->login_field_width+100)."px;\"";
+		}
+
 		switch($mybb->settings['username_method'])
 		{
 			case 0:
@@ -746,7 +762,7 @@ EOF;
 		}
 		$build_menu .= "</ul>\n</div>";
 
-		if($sub_menu)
+		if(!empty($sub_menu))
 		{
 			$this->_build_submenu($sub_menu_title, $sub_menu);
 		}
@@ -804,7 +820,7 @@ EOF;
 	/**
 	 * Output a series of primary navigation tabs for swithcing between items within a particular module/action.
 	 *
-	 * @param array $tabs Nested array of tabs containing possible keys of align, link_target, link, title.
+	 * @param array $tabs Nested array of tabs containing possible keys of align, link_target, link_rel, link, title.
 	 * @param string $active The name of the active tab. Corresponds with the key of each tab item.
 	 */
 	function output_nav_tabs($tabs=array(), $active='')
@@ -829,15 +845,20 @@ EOF;
 			{
 				$target = " target=\"{$tab['link_target']}\"";
 			}
+			$rel = '';
+			if(isset($tab['link_rel']))
+			{
+				$rel = " rel=\"{$tab['link_rel']}\"";
+			}
 			if(!isset($tab['link']))
 			{
 				$tab['link'] = '';
 			}
-			echo "\t\t<li class=\"{$class}\"><a href=\"{$tab['link']}\"{$target}>{$tab['title']}</a></li>\n";
+			echo "\t\t<li class=\"{$class}\"><a href=\"{$tab['link']}\"{$target}{$rel}>{$tab['title']}</a></li>\n";
 			$target = '';
 		}
 		echo "\t</ul>\n";
-		if($tabs[$active]['description'])
+		if(!empty($tabs[$active]['description']))
 		{
 			echo "\t<div class=\"tab_description\">{$tabs[$active]['description']}</div>\n";
 		}
@@ -896,7 +917,7 @@ EOF;
 	 */
 	function build_codebuttons_editor($bind, $editor_language, $smilies)
 	{
-		global $lang, $mybb, $smiliecache, $cache;
+		global $lang, $mybb, $smiliecache, $smiliecount, $cache;
 
 		// Smilies
 		$emoticon = "";
@@ -912,6 +933,10 @@ EOF;
 			if(!$smiliecount)
 			{
 				$smilie_cache = $cache->read("smilies");
+				if(!is_array($smilie_cache))
+				{
+					$smilie_cache = array();
+				}
 				$smiliecount = count($smilie_cache);
 			}
 
@@ -1036,8 +1061,10 @@ EOF;
 <script type="text/javascript">
 var partialmode = {$mybb->settings['partialmode']},
 opt_editor = {
-	plugins: "bbcode,undo",
-	style: "../jscripts/sceditor/textarea_styles/jquery.sceditor.mybb.css",
+	plugins: "undo",
+	format: "bbcode",
+	bbcodeTrim: true,
+	style: "../jscripts/sceditor/styles/jquery.sceditor.mybb.css",
 	rtl: {$lang->settings['rtl']},
 	locale: "mybblang",
 	enablePasteFiltering: true,

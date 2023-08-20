@@ -40,6 +40,7 @@ $sub_tabs['emails'] = array(
 
 // Fetch banned groups
 $query = $db->simple_select("usergroups", "gid,title", "isbannedgroup=1", array('order_by' => 'title'));
+$banned_groups = array();
 while($group = $db->fetch_array($query))
 {
 	$banned_groups[$group['gid']] = $group['title'];
@@ -53,7 +54,7 @@ $plugins->run_hooks("admin_user_banning_begin");
 if($mybb->input['action'] == "prune")
 {
 	// User clicked no
-	if($mybb->input['no'])
+	if($mybb->get_input('no'))
 	{
 		admin_redirect("index.php?module=user-banning");
 	}
@@ -99,7 +100,7 @@ if($mybb->input['action'] == "prune")
 		$cache->update_reportedcontent();
 
 		// Log admin action
-		log_admin_action($user['uid'], htmlspecialchars_uni($user['username']));
+		log_admin_action($user['uid'], $user['username']);
 
 		flash_message($lang->success_pruned, 'success');
 		admin_redirect("index.php?module=user-banning");
@@ -113,7 +114,7 @@ if($mybb->input['action'] == "prune")
 if($mybb->input['action'] == "lift")
 {
 	// User clicked no
-	if($mybb->input['no'])
+	if($mybb->get_input('no'))
 	{
 		admin_redirect("index.php?module=user-banning");
 	}
@@ -141,7 +142,7 @@ if($mybb->input['action'] == "lift")
 	{
 		$updated_group = array(
 			'usergroup' => $ban['oldgroup'],
-			'additionalgroups' => $ban['oldadditionalgroups'],
+			'additionalgroups' => $db->escape_string($ban['oldadditionalgroups']),
 			'displaygroup' => $ban['olddisplaygroup']
 		);
 		$db->delete_query("banned", "uid='{$ban['uid']}'");
@@ -150,11 +151,10 @@ if($mybb->input['action'] == "lift")
 
 		$db->update_query("users", $updated_group, "uid='{$ban['uid']}'");
 
-		$cache->update_banned();
 		$cache->update_moderators();
 
 		// Log admin action
-		log_admin_action($ban['uid'], htmlspecialchars_uni($user['username']));
+		log_admin_action($ban['uid'], $user['username']);
 
 		flash_message($lang->success_ban_lifted, 'success');
 		admin_redirect("index.php?module=user-banning");
@@ -170,13 +170,13 @@ if($mybb->input['action'] == "edit")
 	$query = $db->simple_select("banned", "*", "uid='{$mybb->input['uid']}'");
 	$ban = $db->fetch_array($query);
 
-	$user = get_user($ban['uid']);
-
-	if(!$ban['uid'])
+	if(empty($ban['uid']))
 	{
 		flash_message($lang->error_invalid_ban, 'error');
 		admin_redirect("index.php?module=user-banning");
 	}
+
+	$user = get_user($ban['uid']);
 
 	$plugins->run_hooks("admin_user_banning_edit");
 
@@ -238,10 +238,8 @@ if($mybb->input['action'] == "edit")
 
 			$plugins->run_hooks("admin_user_banning_edit_commit");
 
-			$cache->update_banned();
-
 			// Log admin action
-			log_admin_action($ban['uid'], htmlspecialchars_uni($user['username']));
+			log_admin_action($ban['uid'], $user['username']);
 
 			flash_message($lang->success_ban_updated, 'success');
 			admin_redirect("index.php?module=user-banning");
@@ -265,6 +263,19 @@ if($mybb->input['action'] == "edit")
 	else
 	{
 		$mybb->input = array_merge($mybb->input, $ban);
+	}
+
+	if(!empty($ban['gid']))
+	{
+		$mybb->input['usergroup'] = $ban['gid'];
+	}
+	else if(!empty($user['usergroup']))
+	{
+		$mybb->input['usergroup'] = $user['usergroup'];
+	}
+	else
+	{
+		$mybb->input['usergroup'] = 0;
 	}
 
 	$form_container = new FormContainer($lang->edit_ban);
@@ -314,16 +325,16 @@ if(!$mybb->input['action'])
 		);
 
 		$user = get_user_by_username($mybb->input['username'], $options);
-		
+
 		// Are we searching a user?
-		if(isset($mybb->input['search']))
+		if(is_array($user) && isset($mybb->input['search']))
 		{
 			$where_sql = 'uid=\''.(int)$user['uid'].'\'';
 			$where_sql_full = 'WHERE b.uid=\''.(int)$user['uid'].'\'';
 		}
 		else
 		{
-			if(!$user['uid'])
+			if(empty($user['uid']))
 			{
 				$errors[] = $lang->error_invalid_username;
 			}
@@ -339,18 +350,18 @@ if(!$mybb->input['action'])
 				{
 					$errors[] = $lang->error_already_banned;
 				}
-				
+
 				// Get PRIMARY usergroup information
 				$usergroups = $cache->read("usergroups");
 				if(!empty($usergroups[$user['usergroup']]) && $usergroups[$user['usergroup']]['isbannedgroup'] == 1)
 				{
 					$errors[] = $lang->error_already_banned;
 				}
-			}
 
-			if($user['uid'] == $mybb->user['uid'])
-			{
-				$errors[] = $lang->error_ban_self;
+				if($user['uid'] == $mybb->user['uid'])
+				{
+					$errors[] = $lang->error_ban_self;
+				}
 			}
 
 			// No errors? Insert
@@ -378,7 +389,7 @@ if(!$mybb->input['action'])
 					'uid' => $user['uid'],
 					'gid' => $mybb->get_input('usergroup', MyBB::INPUT_INT),
 					'oldgroup' => $user['usergroup'],
-					'oldadditionalgroups' => $user['additionalgroups'],
+					'oldadditionalgroups' => $db->escape_string($user['additionalgroups']),
 					'olddisplaygroup' => $user['displaygroup'],
 					'admin' => (int)$mybb->user['uid'],
 					'dateline' => TIME_NOW,
@@ -402,10 +413,8 @@ if(!$mybb->input['action'])
 
 				$db->update_query('users', $update_array, "uid = '{$user['uid']}'");
 
-				$cache->update_banned();
-
 				// Log admin action
-				log_admin_action($user['uid'], htmlspecialchars_uni($user['username']), $lifted);
+				log_admin_action($user['uid'], $user['username'], $lifted);
 
 				flash_message($lang->success_banned, 'success');
 				admin_redirect("index.php?module=user-banning");
@@ -422,9 +431,10 @@ if(!$mybb->input['action'])
 
 	$per_page = 20;
 
+	$mybb->input['page'] = $mybb->get_input('page', MyBB::INPUT_INT);
 	if($mybb->input['page'] > 0)
 	{
-		$current_page = $mybb->get_input('page', MyBB::INPUT_INT);
+		$current_page = $mybb->input['page'];
 		$start = ($current_page-1)*$per_page;
 		$pages = $ban_count / $per_page;
 		$pages = ceil($pages);
@@ -441,6 +451,109 @@ if(!$mybb->input['action'])
 	}
 
 	$pagination = draw_admin_pagination($current_page, $per_page, $ban_count, "index.php?module=user-banning&amp;page={page}");
+
+	$form = new Form("index.php?module=user-banning", "post");
+	if($errors)
+	{
+		$page->output_inline_error($errors);
+	}
+
+	$mybb->input['username'] = $mybb->get_input('username');
+	$mybb->input['reason'] = $mybb->get_input('reason');
+	$mybb->input['bantime'] = $mybb->get_input('bantime');
+
+	if(isset($mybb->input['uid']) && empty($mybb->input['username']))
+	{
+		$user = get_user($mybb->input['uid']);
+		$mybb->input['username'] = $user['username'];
+	}
+
+	if(empty($mybb->input['usergroup']))
+	{
+		if(!empty($mybb->settings['purgespammerbangroup']))
+		{
+			$mybb->input['usergroup'] = $mybb->settings['purgespammerbangroup'];
+		}
+		else if(count($banned_groups))
+		{
+			$group = array_keys($banned_groups);
+			$mybb->input['usergroup'] = $group[0];
+		}
+		else
+		{
+			$mybb->input['usergroup'] = 0;
+		}
+	}
+
+	$form_container = new FormContainer($lang->ban_a_user);
+	$form_container->output_row($lang->ban_username, $lang->autocomplete_enabled, $form->generate_text_box('username', $mybb->input['username'], array('id' => 'username')), 'username');
+	$form_container->output_row($lang->ban_reason, "", $form->generate_text_area('reason', $mybb->input['reason'], array('id' => 'reason', 'maxlength' => '255')), 'reason');
+	if(count($banned_groups) > 1)
+	{
+		$form_container->output_row($lang->ban_group, $lang->ban_group_desc, $form->generate_select_box('usergroup', $banned_groups, $mybb->input['usergroup'], array('id' => 'usergroup')), 'usergroup');
+	}
+	foreach($ban_times as $time => $period)
+	{
+		if($time != "---")
+		{
+			$friendly_time = my_date("D, jS M Y @ {$mybb->settings['timeformat']}", ban_date2timestamp($time));
+			$period = "{$period} ({$friendly_time})";
+		}
+		$length_list[$time] = $period;
+	}
+	$form_container->output_row($lang->ban_time, "", $form->generate_select_box('bantime', $length_list, $mybb->input['bantime'], array('id' => 'bantime')), 'bantime');
+
+	$form_container->end();
+
+	// Autocompletion for usernames
+	echo '
+	<link rel="stylesheet" href="../jscripts/select2/select2.css">
+	<script type="text/javascript" src="../jscripts/select2/select2.min.js?ver=1804"></script>
+	<script type="text/javascript">
+	<!--
+	$("#username").select2({
+		placeholder: "'.$lang->search_for_a_user.'",
+		minimumInputLength: 2,
+		multiple: false,
+		ajax: { // instead of writing the function to execute the request we use Select2\'s convenient helper
+			url: "../xmlhttp.php?action=get_users",
+			dataType: \'json\',
+			data: function (term, page) {
+				return {
+					query: term, // search term
+				};
+			},
+			results: function (data, page) { // parse the results into the format expected by Select2.
+				// since we are using custom formatting functions we do not need to alter remote JSON data
+				return {results: data};
+			}
+		},
+		initSelection: function(element, callback) {
+			var query = $(element).val();
+			if (query !== "") {
+				$.ajax("../xmlhttp.php?action=get_users&getone=1", {
+					data: {
+						query: query
+					},
+					dataType: "json"
+				}).done(function(data) { callback(data); });
+			}
+		},
+	});
+
+  	$(\'[for=username]\').on(\'click\', function(){
+		$("#username").select2(\'open\');
+		return false;
+	});
+	// -->
+	</script>';
+
+	$buttons[] = $form->generate_submit_button($lang->ban_user);
+	$buttons[] = $form->generate_submit_button($lang->search_for_a_user, array('name' => 'search'));
+	$form->output_submit_wrapper($buttons);
+	$form->end();
+
+	echo '<br />';
 
 	$table = new Table;
 	$table->construct_header($lang->user);
@@ -521,86 +634,6 @@ if(!$mybb->input['action'])
 	}
 	$table->output($lang->banned_accounts);
 	echo $pagination;
-
-	$form = new Form("index.php?module=user-banning", "post");
-	if($errors)
-	{
-		$page->output_inline_error($errors);
-	}
-
-	if($mybb->input['uid'] && !$mybb->input['username'])
-	{
-		$user = get_user($mybb->input['uid']);
-		$mybb->input['username'] = $user['username'];
-	}
-
-	$form_container = new FormContainer($lang->ban_a_user);
-	$form_container->output_row($lang->ban_username, $lang->autocomplete_enabled, $form->generate_text_box('username', $mybb->input['username'], array('id' => 'username')), 'username');
-	$form_container->output_row($lang->ban_reason, "", $form->generate_text_area('reason', $mybb->input['reason'], array('id' => 'reason', 'maxlength' => '255')), 'reason');
-	if(count($banned_groups) > 1)
-	{
-		$form_container->output_row($lang->ban_group, $lang->add_ban_group_desc, $form->generate_select_box('usergroup', $banned_groups, $mybb->input['usergroup'], array('id' => 'usergroup')), 'usergroup');
-	}
-	foreach($ban_times as $time => $period)
-	{
-		if($time != "---")
-		{
-			$friendly_time = my_date("D, jS M Y @ {$mybb->settings['timeformat']}", ban_date2timestamp($time));
-			$period = "{$period} ({$friendly_time})";
-		}
-		$length_list[$time] = $period;
-	}
-	$form_container->output_row($lang->ban_time, "", $form->generate_select_box('bantime', $length_list, $mybb->input['bantime'], array('id' => 'bantime')), 'bantime');
-
-	$form_container->end();
-
-	// Autocompletion for usernames
-	echo '
-	<link rel="stylesheet" href="../jscripts/select2/select2.css">
-	<script type="text/javascript" src="../jscripts/select2/select2.min.js?ver=1804"></script>
-	<script type="text/javascript">
-	<!--
-	$("#username").select2({
-		placeholder: "'.$lang->search_for_a_user.'",
-		minimumInputLength: 2,
-		multiple: false,
-		ajax: { // instead of writing the function to execute the request we use Select2\'s convenient helper
-			url: "../xmlhttp.php?action=get_users",
-			dataType: \'json\',
-			data: function (term, page) {
-				return {
-					query: term, // search term
-				};
-			},
-			results: function (data, page) { // parse the results into the format expected by Select2.
-				// since we are using custom formatting functions we do not need to alter remote JSON data
-				return {results: data};
-			}
-		},
-		initSelection: function(element, callback) {
-			var query = $(element).val();
-			if (query !== "") {
-				$.ajax("../xmlhttp.php?action=get_users&getone=1", {
-					data: {
-						query: query
-					},
-					dataType: "json"
-				}).done(function(data) { callback(data); });
-			}
-		},
-	});
-
-  	$(\'[for=username]\').click(function(){
-		$("#username").select2(\'open\');
-		return false;
-	});
-	// -->
-	</script>';
-
-	$buttons[] = $form->generate_submit_button($lang->ban_user);
-	$buttons[] = $form->generate_submit_button($lang->search_for_a_user, array('name' => 'search'));
-	$form->output_submit_wrapper($buttons);
-	$form->end();
 
 	$page->output_footer();
 }

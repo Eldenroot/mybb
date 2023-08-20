@@ -67,6 +67,11 @@ class DB_SQLite implements DB_Base
 	public $link;
 
 	/**
+	 * @var array
+	 */
+	public $connections = array();
+
+	/**
 	 * Explanation of a query.
 	 *
 	 * @var string
@@ -141,7 +146,13 @@ class DB_SQLite implements DB_Base
 
 		require_once MYBB_ROOT."inc/db_pdo.php";
 
-		$this->db = new dbpdoEngine("sqlite:{$config['database']}");
+		try {
+			$this->db = new dbpdoEngine("sqlite:{$config['database']}");
+		} catch (Exception $ex) {
+			$this->error("[READ] Unable to open the SQLite database");
+
+			return false;
+		}
 
 		$query_time = get_execution_time();
 
@@ -325,7 +336,11 @@ class DB_SQLite implements DB_Base
 			$this->data_seek($query, $row);
 		}
 		$array = $this->fetch_array($query);
-		return $array[$field];
+		if($array !== null && $array !== false)
+		{
+			return $array[$field];
+		}
+		return null;
 	}
 
 	/**
@@ -884,7 +899,7 @@ class DB_SQLite implements DB_Base
 	 */
 	function escape_string_like($string)
 	{
-		return $this->escape_string(str_replace(array('%', '_') , array('\\%' , '\\_') , $string));
+		return $this->escape_string(str_replace(array('\\', '%', '_') , array('\\\\', '\\%' , '\\_') , $string));
 	}
 
 	/**
@@ -910,8 +925,8 @@ class DB_SQLite implements DB_Base
 	 */
 	function optimize_table($table)
 	{
-		$query = $this->query("VACUUM ".$this->table_prefix.$table."");
-		$query->closeCursor();
+		// SQLite doesn't support table level optimization.
+		// Using `VACUUM [main | $db_name]` may also be blocked by any opened query cursor, hence generating an error.
 	}
 
 	/**
@@ -953,25 +968,34 @@ class DB_SQLite implements DB_Base
 	 */
 	function show_fields_from($table)
 	{
-		$old_tbl_prefix = $this->table_prefix;
-		$this->set_table_prefix("");
-		$query = $this->simple_select("sqlite_master", "sql", "type = 'table' AND name = '{$old_tbl_prefix}{$table}'");
-		$this->set_table_prefix($old_tbl_prefix);
-		$table = trim(preg_replace('#CREATE\s+TABLE\s+"?'.$this->table_prefix.$table.'"?#i', '', $this->fetch_field($query, "sql")));
-		$query->closeCursor();
-
-		preg_match('#\((.*)\)#s', $table, $matches);
-
+		$query = $this->write_query("PRAGMA TABLE_INFO('".$this->table_prefix.$table."')");
 		$field_info = array();
-		$table_cols = explode(',', trim($matches[1]));
-		foreach($table_cols as $declaration)
+		while($field = $this->fetch_array($query))
 		{
-			$entities = preg_split('#\s+#', trim($declaration));
-			$column_name = preg_replace('/"?([^"]+)"?/', '\1', $entities[0]);
+			if(!empty($field['pk']))
+			{
+				$field['_key'] = 'PRI';
+				$field['_extra'] = 'auto_increment';
+			}
+			else
+			{
+				$field['_key'] = '';
+				$field['_extra'] = '';
+			}
 
-			$field_info[] = array('Extra' => $entities[1], 'Field' => $column_name);
+			// SQLite allows NULLs in most PRIMARY KEY columns due to a bug in early versions, even in an INTEGER PRIMARY KEY column, read https://sqlite.org/lang_createtable.html for details. We won't fix this for consistency among other database engines.
+			$field['_nullable'] = $field['notnull'] ? 'NO' : 'YES';
+
+			$field_info[] = array(
+				'Field' => $field['name'],
+				'Type' => $field['type'],
+				'Null' => $field['_nullable'],
+				'Key' => $field['_key'],
+				'Default' => $field['dflt_value'],
+				'Extra' => $field['_extra'],
+			);
 		}
-
+		$query->closeCursor();
 		return $field_info;
 	}
 
@@ -1065,9 +1089,11 @@ class DB_SQLite implements DB_Base
 			$table_prefix = $this->table_prefix;
 		}
 
+		$table_prefix_bak = $this->table_prefix;
+		$this->table_prefix = '';
 		if($hard == false)
 		{
-			if($this->table_exists($table))
+			if($this->table_exists($table_prefix.$table))
 			{
 				$query = $this->query('DROP TABLE '.$table_prefix.$table);
 			}
@@ -1076,6 +1102,7 @@ class DB_SQLite implements DB_Base
 		{
 			$query = $this->query('DROP TABLE '.$table_prefix.$table);
 		}
+		$this->table_prefix = $table_prefix_bak;
 
 		if(isset($query))
 		{
@@ -1112,10 +1139,11 @@ class DB_SQLite implements DB_Base
 	 *
 	 * @param string $table The table
 	 * @param array $replacements The replacements
-	 * @param mixed $default_field The default field(s)
+	 * @param string|array $default_field The default field(s)
+	 * @param boolean $insert_id Whether or not to return an insert id. True by default
 	 * @return int|PDOStatement|bool Returns either the insert id (if a new row is inserted), the query resource (if a row is updated) or false on failure
 	 */
-	function replace_query($table, $replacements=array(), $default_field="")
+	function replace_query($table, $replacements=array(), $default_field="", $insert_id=true)
 	{
 		global $mybb;
 
@@ -1445,11 +1473,14 @@ class DB_SQLite implements DB_Base
 	 * @param string $table The table
 	 * @param string $column The column name
 	 * @param string $new_definition the new column definition
+	 * @param boolean|string $new_not_null Whether to "drop" or "set" the NOT NULL attribute (no change if false)
+	 * @param boolean|string $new_default_value The new default value, or false to drop the attribute
+	 * @return bool Returns true if all queries are executed successfully or false if one of them failed
 	 */
-	function modify_column($table, $column, $new_definition)
+	function modify_column($table, $column, $new_definition, $new_not_null=false, $new_default_value=false)
 	{
 		// We use a rename query as both need to duplicate the table etc...
-		$this->rename_column($table, $column, $column, $new_definition);
+		return $this->rename_column($table, $column, $column, $new_definition, $new_not_null, $new_default_value);
 	}
 
 	/**
@@ -1459,12 +1490,39 @@ class DB_SQLite implements DB_Base
 	 * @param string $old_column The old column name
 	 * @param string $new_column the new column name
 	 * @param string $new_definition the new column definition
-	 * @return PDOStatement
+	 * @param boolean|string $new_not_null Whether to "drop" or "set" the NOT NULL attribute (no change if false)
+	 * @param boolean|string $new_default_value The new default value, or false to drop the attribute
+	 * @return bool Returns true if all queries are executed successfully
 	 */
-	function rename_column($table, $old_column, $new_column, $new_definition)
+	function rename_column($table, $old_column, $new_column, $new_definition, $new_not_null=false, $new_default_value=false)
 	{
+		if($new_not_null !== false)
+		{
+			if(strtolower($new_not_null) == "set")
+			{
+				$not_null = "NOT NULL";
+			}
+			else
+			{
+				$not_null = "NULL";
+			}
+		}
+		else
+		{
+			$not_null = '';
+		}
+
+		if($new_default_value !== false)
+		{
+			$default = "DEFAULT ".$new_default_value;
+		}
+		else
+		{
+			$default = '';
+		}
+
 		// This will trigger the "alter_table_parse" function which will copy the table and rename the column
-		return $this->write_query("ALTER TABLE {$this->table_prefix}{$table} CHANGE {$old_column} {$new_column} {$new_definition}");
+		return (bool) $this->write_query("ALTER TABLE {$this->table_prefix}{$table} CHANGE {$old_column} {$new_column} {$new_definition} {$not_null} {$default}");
 	}
 
 	/**

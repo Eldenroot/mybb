@@ -33,8 +33,8 @@ function generate_thumbnail($file, $path, $filename, $maxheight, $maxwidth)
 	$imgheight = $imgdesc[1];
 	$imgtype = $imgdesc[2];
 	$imgattr = $imgdesc[3];
-	$imgbits = $imgdesc['bits'];
-	$imgchan = $imgdesc['channels'];
+	$imgbits = isset($imgdesc['bits']) ? $imgdesc['bits'] : null;
+	$imgchan = isset($imgdesc['channels']) ? $imgdesc['channels'] : null;
 
 	if($imgwidth == 0 || $imgheight == 0)
 	{
@@ -178,7 +178,7 @@ function check_thumbnail_memory($width, $height, $type, $bitdepth, $channels)
 	}
 
 	$limit = preg_match("#^([0-9]+)\s?([kmg])b?$#i", trim(my_strtolower($memory_limit)), $matches);
-	$memory_limit = 0;
+	$memory_limit = (int)$memory_limit;
 	if($matches[1] && $matches[2])
 	{
 		switch($matches[2])

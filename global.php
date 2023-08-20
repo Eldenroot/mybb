@@ -14,10 +14,10 @@ if(!$working_dir)
 	$working_dir = '.';
 }
 
+$shutdown_queries = $shutdown_functions = array();
+
 // Load main MyBB core file which begins all of the magic
 require_once $working_dir.'/inc/init.php';
-
-$shutdown_queries = $shutdown_functions = array();
 
 // Read the usergroups cache as well as the moderators cache
 $groupscache = $cache->read('usergroups');
@@ -27,11 +27,6 @@ if(!is_array($groupscache))
 {
 	$cache->update_usergroups();
 	$groupscache = $cache->read('usergroups');
-}
-
-if(!defined('THIS_SCRIPT'))
-{
-	define('THIS_SCRIPT', '');
 }
 
 $current_page = my_strtolower(basename(THIS_SCRIPT));
@@ -94,6 +89,12 @@ else if(!isset($mybb->settings['bblanguage']))
 $lang->set_language($mybb->settings['bblanguage']);
 $lang->load('global');
 $lang->load('messages');
+
+// Wipe lockout cookie if enough time has passed
+if(isset($mybb->cookies['lockoutexpiry']) && $mybb->cookies['lockoutexpiry'] < TIME_NOW)
+{
+	my_unsetcookie('lockoutexpiry');
+}
 
 // Run global_start plugin hook now that the basics are set up
 $plugins->run_hooks('global_start');
@@ -182,9 +183,8 @@ if(in_array($current_page, $valid))
 	if(isset($mybb->input['pid']) && THIS_SCRIPT != "polls.php")
 	{
 		$query = $db->simple_select("posts", "fid", "pid = '{$mybb->input['pid']}'", array("limit" => 1));
-		$fid = $db->fetch_field($query, 'fid');
 
-		if($fid)
+		if($db->num_rows($query) > 0 && $fid = $db->fetch_field($query, 'fid'))
 		{
 			$style = $forum_cache[$fid];
 			$load_from_forum = 1;
@@ -194,9 +194,8 @@ if(in_array($current_page, $valid))
 	else if(isset($mybb->input['tid']))
 	{
 		$query = $db->simple_select('threads', 'fid', "tid = '{$mybb->input['tid']}'", array('limit' => 1));
-		$fid = $db->fetch_field($query, 'fid');
 
-		if($fid)
+		if($db->num_rows($query) > 0 && $fid = $db->fetch_field($query, 'fid'))
 		{
 			$style = $forum_cache[$fid];
 			$load_from_forum = 1;
@@ -205,10 +204,9 @@ if(in_array($current_page, $valid))
 	// If we're accessing poll results, fetch the forum theme for it and if we're overriding it
 	else if(isset($mybb->input['pid']) && THIS_SCRIPT == "polls.php")
 	{
-		$query = $db->simple_select('threads', 'fid', "poll = '{$mybb->input['pid']}'", array('limit' => 1));
-		$fid = $db->fetch_field($query, 'fid');
+		$query = $db->query("SELECT t.fid FROM ".TABLE_PREFIX."polls p INNER JOIN ".TABLE_PREFIX."threads t ON (t.tid=p.tid) WHERE p.pid = '{$mybb->input['pid']}' LIMIT 1");
 
-		if($fid)
+		if($db->num_rows($query) > 0 && $fid = $db->fetch_field($query, 'fid'))
 		{
 			$style = $forum_cache[$fid];
 			$load_from_forum = 1;
@@ -335,6 +333,10 @@ foreach($stylesheet_scripts as $stylesheet_script)
 				else
 				{
 					$stylesheet_url = $mybb->get_asset_url($page_stylesheet);
+					if (file_exists(MYBB_ROOT.$page_stylesheet))
+					{
+						$stylesheet_url .= "?t=".filemtime(MYBB_ROOT.$page_stylesheet);
+					}
 				}
 
 				if($mybb->settings['minifycss'])
@@ -349,7 +351,7 @@ foreach($stylesheet_scripts as $stylesheet_script)
 					$id = (int) my_substr($query_string, 11);
 					$query = $db->simple_select("themestylesheets", "name", "sid={$id}");
 					$real_name = $db->fetch_field($query, "name");
-					$theme_stylesheets[$real_name] = "<link type=\"text/css\" rel=\"stylesheet\" href=\"{$stylesheet_url}\" />\n";
+					$theme_stylesheets[$real_name] = $id;
 				}
 				else
 				{
@@ -363,15 +365,33 @@ foreach($stylesheet_scripts as $stylesheet_script)
 }
 unset($actions);
 
+$css_php_script_stylesheets = array();
+
 if(!empty($theme_stylesheets) && is_array($theme['disporder']))
 {
 	foreach($theme['disporder'] as $style_name => $order)
 	{
 		if(!empty($theme_stylesheets[$style_name]))
 		{
-			$stylesheets .= $theme_stylesheets[$style_name];
+			if(is_int($theme_stylesheets[$style_name]))
+			{
+				$css_php_script_stylesheets[] = $theme_stylesheets[$style_name];
+			}
+			else
+			{
+				$stylesheets .= $theme_stylesheets[$style_name];
+			}
 		}
 	}
+}
+
+if(!empty($css_php_script_stylesheets))
+{
+	$sheet = $mybb->settings['bburl'] . '/css.php?' . http_build_query(array(
+		'stylesheet' => $css_php_script_stylesheets
+		));
+
+	$stylesheets .= "<link type=\"text/css\" rel=\"stylesheet\" href=\"{$sheet}\" />\n";
 }
 
 // Are we linking to a remote theme server?
@@ -451,11 +471,12 @@ else
 
 $templatelist .= "headerinclude,header,footer,gobutton,htmldoctype,header_welcomeblock_member,header_welcomeblock_member_user,header_welcomeblock_member_moderator,header_welcomeblock_member_admin,error";
 $templatelist .= ",global_pending_joinrequests,global_awaiting_activation,nav,nav_sep,nav_bit,nav_sep_active,nav_bit_active,footer_languageselect,footer_themeselect,global_unreadreports,footer_contactus";
-$templatelist .= ",global_boardclosed_warning,global_bannedwarning,error_inline,error_nopermission_loggedin,error_nopermission,global_pm_alert,header_menu_search,header_menu_portal,redirect,footer_languageselect_option";
-$templatelist .= ",video_dailymotion_embed,video_facebook_embed,video_liveleak_embed,video_metacafe_embed,video_myspacetv_embed,video_veoh_embed,video_vimeo_embed,video_yahoo_embed,video_youtube_embed,debug_summary";
-$templatelist .= ",smilieinsert_row,smilieinsert_row_empty,smilieinsert,smilieinsert_getmore,smilieinsert_smilie,global_board_offline_modal,footer_themeselector,task_image,usercp_themeselector_option,php_warnings";
-$templatelist .= ",mycode_code,mycode_email,mycode_img,mycode_php,mycode_quote_post,mycode_size_int,mycode_url,global_no_permission_modal,global_boardclosed_reason,nav_dropdown,global_remote_avatar_notice";
-$templatelist .= ",header_welcomeblock_member_pms,header_welcomeblock_member_search,header_welcomeblock_guest,header_menu_calendar,header_menu_memberlist,global_dst_detection,header_quicksearch,smilie";
+$templatelist .= ",global_boardclosed_warning,global_bannedwarning,error_inline,error_inline_item,error_nopermission_loggedin,error_nopermission,global_pm_alert,header_menu_search,header_menu_portal,redirect,footer_languageselect_option";
+$templatelist .= ",video_dailymotion_embed,video_facebook_embed,video_liveleak_embed,video_metacafe_embed,video_myspacetv_embed,video_mixer_embed,video_vimeo_embed,video_yahoo_embed,video_youtube_embed,debug_summary";
+$templatelist .= ",smilieinsert_row,smilieinsert_row_empty,smilieinsert,smilieinsert_getmore,smilieinsert_smilie,global_board_offline_modal,footer_showteamlink,footer_themeselector,task_image,usercp_themeselector_option,php_warnings";
+$templatelist .= ",mycode_code,mycode_email,mycode_img,mycode_php,mycode_quote_post,mycode_size_int,mycode_url,global_no_permission_modal,global_boardclosed_reason,nav_dropdown,global_remote_avatar_notice,global_modqueue,global_modqueue_notice";
+$templatelist .= ",header_welcomeblock_member_buddy,header_welcomeblock_member_pms,header_welcomeblock_member_search,header_welcomeblock_guest,header_welcomeblock_guest_login_modal,header_welcomeblock_guest_login_modal_lockout";
+$templatelist .= ",header_menu_calendar,header_menu_memberlist,global_dst_detection,header_quicksearch,smilie,modal,modal_button";
 $templates->cache($db->escape_string($templatelist));
 
 // Set the current date and time now
@@ -509,14 +530,19 @@ if($mybb->user['uid'] != 0)
 	// Format the welcome back message
 	$lang->welcome_back = $lang->sprintf($lang->welcome_back, build_profile_link(htmlspecialchars_uni($mybb->user['username']), $mybb->user['uid']), $lastvisit);
 
-	$searchlink = '';
+	$buddylink = $searchlink = $pmslink = '';
+
+	if(!empty($mybb->user['buddylist']))
+	{
+		eval('$buddylink = "' . $templates->get('header_welcomeblock_member_buddy') . '";');
+	}
+
 	if($mybb->usergroup['cansearch'] == 1)
 	{
 		eval('$searchlink = "'.$templates->get('header_welcomeblock_member_search').'";');
 	}
 
 	// Tell the user their PM usage
-	$pmslink = '';
 	if($mybb->settings['enablepms'] != 0 && $mybb->usergroup['canusepms'] == 1)
 	{
 		$lang->welcome_pms_usage = $lang->sprintf($lang->welcome_pms_usage, my_number_format($mybb->user['pms_unread']), my_number_format($mybb->user['pms_total']));
@@ -544,6 +570,23 @@ else
 			$login_username = $lang->login_username;
 			break;
 	}
+
+	if(!empty($mybb->cookies['lockoutexpiry']))
+	{
+		$secsleft = (int)($mybb->cookies['lockoutexpiry'] - TIME_NOW);
+		$hoursleft = floor($secsleft / 3600);
+		$minsleft = floor(($secsleft / 60) % 60);
+		$secsleft = floor($secsleft % 60);
+
+		$lang->failed_login_wait = $lang->sprintf($lang->failed_login_wait, $hoursleft, $minsleft, $secsleft);
+
+		eval('$loginform = "'.$templates->get('header_welcomeblock_guest_login_modal_lockout').'";');
+	}
+	else
+	{
+		eval('$loginform = "'.$templates->get('header_welcomeblock_guest_login_modal').'";');
+	}
+
 	eval('$welcomeblock = "'.$templates->get('header_welcomeblock_guest').'";');
 }
 
@@ -576,6 +619,7 @@ $groupleaders = $cache->read('groupleaders');
 if($mybb->user['uid'] != 0 && is_array($groupleaders) && array_key_exists($mybb->user['uid'], $groupleaders))
 {
 	$groupleader = $groupleaders[$mybb->user['uid']];
+	$showjoinnotice = false;
 
 	$gids = "'0'";
 	foreach($groupleader as $user)
@@ -586,31 +630,41 @@ if($mybb->user['uid'] != 0 && is_array($groupleaders) && array_key_exists($mybb-
 		}
 
 		$user['gid'] = (int)$user['gid'];
-		$gids .= ",'{$user['gid']}'";
+
+		if(!empty($groupscache[$user['gid']]['type']) && $groupscache[$user['gid']]['type'] == 4)
+		{
+			$showjoinnotice = true;
+			$gids .= ",'{$user['gid']}'";
+		}
 	}
 
-	$query = $db->simple_select('joinrequests', 'COUNT(uid) as total', "gid IN ({$gids}) AND invite='0'");
-	$total_joinrequests = $db->fetch_field($query, 'total');
-
-	if($total_joinrequests > 0)
+	if($showjoinnotice)
 	{
-		if($total_joinrequests == 1)
-		{
-			$lang->pending_joinrequests = $lang->pending_joinrequest;
-		}
-		else
-		{
-			$total_joinrequests = my_number_format($total_joinrequests);
-			$lang->pending_joinrequests = $lang->sprintf($lang->pending_joinrequests, $total_joinrequests);
-		}
+		$query = $db->simple_select('joinrequests', 'COUNT(uid) as total', "gid IN ({$gids}) AND invite='0'");
+		$total_joinrequests = $db->fetch_field($query, 'total');
 
-		eval('$pending_joinrequests = "'.$templates->get('global_pending_joinrequests').'";');
+		if($total_joinrequests > 0)
+		{
+			if($total_joinrequests == 1)
+			{
+				$lang->pending_joinrequests = $lang->pending_joinrequest;
+			}
+			else
+			{
+				$lang->pending_joinrequests = $lang->sprintf($lang->pending_joinrequests, my_number_format($total_joinrequests));
+			}
+
+			eval('$pending_joinrequests = "'.$templates->get('global_pending_joinrequests').'";');
+		}
 	}
 }
 
-$unreadreports = '';
+$modnotice = '';
+$moderation_queue = array();
+$can_access_moderationqueue = false;
+
 // This user is a moderator, super moderator or administrator
-if($mybb->settings['reportmethod'] == "db" && ($mybb->usergroup['cancp'] == 1 || ($mybb->user['ismoderator'] && $mybb->usergroup['canmodcp'] == 1 && $mybb->usergroup['canmanagereportedcontent'] == 1)))
+if($mybb->usergroup['cancp'] == 1 || ($mybb->user['ismoderator'] && $mybb->usergroup['canmodcp'] == 1 && $mybb->usergroup['canmanagereportedcontent'] == 1))
 {
 	// Only worth checking if we are here because we have ACP permissions and the other condition fails
 	if($mybb->usergroup['cancp'] == 1 && !($mybb->user['ismoderator'] && $mybb->usergroup['canmodcp'] == 1 && $mybb->usergroup['canmanagereportedcontent'] == 1))
@@ -686,10 +740,66 @@ if($mybb->settings['reportmethod'] == "db" && ($mybb->usergroup['cancp'] == 1 ||
 					$lang->unread_reports = $lang->sprintf($lang->unread_reports, my_number_format($unread));
 				}
 
-				eval('$unreadreports = "'.$templates->get('global_unreadreports').'";');
+				eval('$moderation_queue[] = "'.$templates->get('global_unreadreports', 1, 0).'";');
 			}
 		}
 	}
+}
+
+// Get awaiting moderation queue stats, except if the page is editpost.php,
+// because that page can make changes - (un)approving attachments, or deleting
+// unapproved attachments - that would invalidate anything generated here.
+// Just leave this queue notification blank for editpost.php.
+if(!(defined('THIS_SCRIPT') && THIS_SCRIPT == 'editpost.php') && ($can_access_moderationqueue || ($mybb->user['ismoderator'] && $mybb->usergroup['canmodcp'] == 1 && $mybb->usergroup['canmanagemodqueue'] == 1)))
+{
+	$unapproved_posts = $unapproved_threads = 0;
+	$query = $db->simple_select("posts", "replyto", "visible = 0");
+	while($unapproved = $db->fetch_array($query))
+	{
+		if($unapproved["replyto"] == 0){
+			$unapproved_threads++;
+		} else {
+			$unapproved_posts++;
+		}
+	}
+
+	$query = $db->simple_select("attachments", "COUNT(aid) AS unapprovedattachments", "visible=0");
+	$unapproved_attachments = $db->fetch_field($query, "unapprovedattachments");
+
+	$modqueue_types = array('threads', 'posts', 'attachments');
+
+	foreach($modqueue_types as $modqueue_type)
+	{
+		if(!empty(${'unapproved_'.$modqueue_type}))
+		{
+			if(${'unapproved_'.$modqueue_type} == 1)
+			{
+				$modqueue_message = $lang->{'unapproved_'.substr($modqueue_type, 0, -1)};
+			}
+			else
+			{
+				$modqueue_message = $lang->sprintf($lang->{'unapproved_'.$modqueue_type}, my_number_format(${'unapproved_'.$modqueue_type}));
+			}
+
+			eval('$moderation_queue[] = "'.$templates->get('global_modqueue', 1, 0).'";');
+		}
+	}
+}
+
+if(!empty($moderation_queue))
+{
+	$moderation_queue_last = array_pop($moderation_queue);
+	if(empty($moderation_queue))
+	{
+		$moderation_queue = $moderation_queue_last;
+	}
+	else
+	{
+		$moderation_queue = implode($lang->comma, $moderation_queue).' '.$lang->and.' '.$moderation_queue_last;
+	}
+	$moderation_queue = $lang->sprintf($lang->mod_notice, $moderation_queue);
+
+	eval('$modnotice = "'.$templates->get('global_modqueue_notice').'";');
 }
 
 // Got a character set?
@@ -703,30 +813,30 @@ if(isset($lang->settings['charset']) && $lang->settings['charset'])
 $bannedwarning = '';
 if($mybb->usergroup['isbannedgroup'] == 1)
 {
-	// Fetch details on their ban
-	$query = $db->simple_select('banned', '*', "uid = '{$mybb->user['uid']}'", array('limit' => 1));
-	$ban = $db->fetch_array($query);
-
-	if($ban['uid'])
+	// Format their ban lift date and reason appropriately
+	if(!empty($mybb->user['banned']))
 	{
-		// Format their ban lift date and reason appropriately
-		$banlift = $lang->banned_lifted_never;
-		$reason = htmlspecialchars_uni($ban['reason']);
-
-		if($ban['lifted'] > 0)
+		if(!empty($mybb->user['banlifted']))
 		{
-			$banlift = my_date('normal', $ban['lifted']);
+			$banlift = my_date('normal', $mybb->user['banlifted']);
+		}
+		else
+		{
+			$banlift = $lang->banned_lifted_never;
 		}
 	}
-
-	if(empty($reason))
-	{
-		$reason = $lang->unknown;
-	}
-
-	if(empty($banlift))
+	else
 	{
 		$banlift = $lang->unknown;
+	}
+
+	if(!empty($mybb->user['banreason']))
+	{
+		$reason = htmlspecialchars_uni($mybb->user['banreason']);
+	}
+	else
+	{
+		$reason = $lang->unknown;
 	}
 
 	// Display a nice warning to the user
@@ -780,11 +890,12 @@ if(isset($mybb->user['pmnotice']) && $mybb->user['pmnotice'] == 2 && $mybb->user
 }
 
 $remote_avatar_notice = '';
-if(($mybb->user['avatartype'] === 'remote' || $mybb->user['avatartype'] === 'gravatar') && !$mybb->settings['allowremoteavatars'])
+if(isset($mybb->user['avatartype']) && ($mybb->user['avatartype'] === 'remote' || $mybb->user['avatartype'] === 'gravatar') && !$mybb->settings['allowremoteavatars'])
 {
 	eval('$remote_avatar_notice = "'.$templates->get('global_remote_avatar_notice').'";');
 }
 
+$awaitingusers = '';
 if($mybb->settings['awactialert'] == 1 && $mybb->usergroup['cancp'] == 1)
 {
 	$awaitingusers = $cache->read('awaitingactivation');
@@ -835,6 +946,12 @@ if($mybb->settings['awactialert'] == 1 && $mybb->usergroup['cancp'] == 1)
 	{
 		$awaitingusers = '';
 	}
+}
+
+$jsTemplates = array();
+foreach (array('modal', 'modal_button') as $template) {
+	eval('$jsTemplates["'.$template.'"] = "'.$templates->get($template, 1, 0).'";');
+	$jsTemplates[$template] = str_replace(array("\n","\r"), array("\\\n", ""), addslashes($jsTemplates[$template]));
 }
 
 // Set up some of the default templates
@@ -906,13 +1023,28 @@ if($mybb->settings['showlanguageselect'] != 0)
 $theme_select = $theme_options = '';
 if($mybb->settings['showthemeselect'] != 0)
 {
-	$theme_options = build_theme_select("theme", $mybb->user['style'], 0, '', false, true);
+	if(isset($mybb->user['style']))
+	{
+		$selected = $mybb->user['style'];
+	}
+	else
+	{
+		$selected = -1;
+	}
+
+	$theme_options = build_theme_select("theme", $selected, 0, '', false, true);
 
 	if(!empty($theme_options))
 	{
 		$theme_redirect_url = get_current_location(true, 'theme');
 		eval('$theme_select = "'.$templates->get('footer_themeselect').'";');
 	}
+}
+
+$showteamlink = '';
+if($mybb->settings['enableshowteam'] != 0)
+{
+	eval('$showteamlink = "'.$templates->get('footer_showteamlink').'";');
 }
 
 // If we use the contact form, show 'Contact Us' link when appropriate
@@ -966,10 +1098,19 @@ $closed_bypass = array(
 		'logout',
 	),
 	'captcha.php',
+	'contact.php',
 );
 
 // If the board is closed, the user is not an administrator and they're not trying to login, show the board closed message
-if($mybb->settings['boardclosed'] == 1 && $mybb->usergroup['canviewboardclosed'] != 1 && !in_array($current_page, $closed_bypass) && (!is_array($closed_bypass[$current_page]) || !in_array($mybb->get_input('action'), $closed_bypass[$current_page])))
+if(
+	$mybb->settings['boardclosed'] == 1 &&
+	$mybb->usergroup['canviewboardclosed'] != 1 &&
+	!in_array($current_page, $closed_bypass) &&
+	!(
+		isset($closed_bypass[$current_page]) &&
+		in_array($mybb->get_input('action'), $closed_bypass[$current_page])
+	)
+)
 {
 	// Show error
 	if(!$mybb->settings['boardclosed_reason'])
@@ -1008,10 +1149,19 @@ $force_bypass = array(
 		'resetpassword',
 	),
 	'captcha.php',
+	'contact.php',
 );
 
 // If the board forces user to login/register, and the user is a guest, show the force login message
-if($mybb->settings['forcelogin'] == 1 && $mybb->user['uid'] == 0 && !in_array($current_page, $force_bypass) && (!is_array($force_bypass[$current_page]) || !in_array($mybb->get_input('action'), $force_bypass[$current_page])))
+if(
+	$mybb->settings['forcelogin'] == 1 &&
+	$mybb->user['uid'] == 0 &&
+	!in_array($current_page, $force_bypass) &&
+	!(
+		isset($force_bypass[$current_page]) &&
+		in_array($mybb->get_input('action'), $force_bypass[$current_page])
+	)
+)
 {
 	// Show error
 	error_no_permission();
@@ -1040,7 +1190,7 @@ if(!$mybb->user['uid'] && $mybb->settings['usereferrals'] == 1 && (isset($mybb->
 	$query = $db->simple_select('users', 'uid', $condition, array('limit' => 1));
 	$referrer = $db->fetch_array($query);
 
-	if($referrer['uid'])
+	if(!empty($referrer) && $referrer['uid'])
 	{
 		my_setcookie('mybb[referrer]', $referrer['uid']);
 	}
@@ -1092,7 +1242,10 @@ if($mybb->usergroup['canview'] != 1)
 // If they are, redirect them to change it
 if($mybb->user['uid'] && is_banned_email($mybb->user['email']) && $mybb->settings['emailkeep'] != 1)
 {
-	if(THIS_SCRIPT != 'usercp.php' || THIS_SCRIPT == 'usercp.php' && $mybb->get_input('action') != 'email' && $mybb->get_input('action') != 'do_email')
+	if(
+		!(THIS_SCRIPT == 'usercp.php' && in_array($mybb->get_input('action'), array('email', 'do_email'))) &&
+		!(THIS_SCRIPT == 'member.php' && $mybb->get_input('action') == 'activate')
+	)
 	{
 		redirect('usercp.php?action=email');
 	}
@@ -1103,30 +1256,17 @@ if($mybb->user['uid'] && is_banned_email($mybb->user['email']) && $mybb->setting
 }
 
 // work out which items the user has collapsed
-$colcookie = '';
+$collapse = $collapsed = $collapsedimg = $collapsedthead = array();
+
 if(!empty($mybb->cookies['collapsed']))
 {
 	$colcookie = $mybb->cookies['collapsed'];
-}
 
-// set up collapsable items (to automatically show them us expanded)
-$collapsed = array('boardstats' => '', 'boardstats_e' => '', 'quickreply' => '', 'quickreply_e' => '');
-$collapsedimg = $collapsed;
-
-if($colcookie)
-{
-	$col = explode("|", $colcookie);
-	if(!is_array($col))
+	// Preserve and don't unset $collapse, will be needed globally throughout many pages
+	$collapse = explode("|", $colcookie);
+	foreach($collapse as $val)
 	{
-		$col[0] = $colcookie; // only one item
-	}
-	unset($collapsed);
-	foreach($col as $key => $val)
-	{
-		$ex = $val."_e";
-		$co = $val."_c";
-		$collapsed[$co] = "display: show;";
-		$collapsed[$ex] = "display: none;";
+		$collapsed[$val."_e"] = "display: none;";
 		$collapsedimg[$val] = "_collapsed";
 		$collapsedthead[$val] = " thead_collapsed";
 	}

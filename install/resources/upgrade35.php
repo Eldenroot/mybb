@@ -50,7 +50,7 @@ function upgrade35_dbchanges()
 	$db->delete_query('templates', "title IN ('member_register_regimage_ayah', 'post_captcha_ayah')");
 
 	global $footer_extra;
-	$footer_extra = "<script type=\"text/javascript\">$(document).ready(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
+	$footer_extra = "<script type=\"text/javascript\">$(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
 
 	$output->print_contents("<p>Click next to continue with the upgrade process.</p>");
 	$output->print_footer("35_dbchanges2");
@@ -103,7 +103,7 @@ function upgrade35_dbchanges2()
 	}
 
 	global $footer_extra;
-	$footer_extra = "<script type=\"text/javascript\">$(document).ready(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
+	$footer_extra = "<script type=\"text/javascript\">$(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
 
 	$output->print_contents("<p>Click next to continue with the upgrade process.</p>");
 	$output->print_footer("35_dbchanges3");
@@ -150,7 +150,7 @@ function upgrade35_dbchanges3()
 	}
 
 	global $footer_extra;
-	$footer_extra = "<script type=\"text/javascript\">$(document).ready(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
+	$footer_extra = "<script type=\"text/javascript\">$(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
 
 	$output->print_contents("<p>Click next to continue with the upgrade process.</p>");
 	$output->print_footer("35_dbchanges4");
@@ -164,12 +164,13 @@ function upgrade35_dbchanges4()
 	echo "<p>Adding index files to attachment directories...</p>";
 	flush();
 
-	$dir = @opendir('../'.$mybb->settings['uploadspath']);
+	$uploadspath_abs = mk_path_abs($mybb->settings['uploadspath']);
+	$dir = @opendir($uploadspath_abs);
 	if($dir)
 	{
 		while(($file = @readdir($dir)) !== false)
 		{
-			$filename = "../{$mybb->settings['uploadspath']}/{$file}";
+			$filename = "{$uploadspath_abs}/{$file}";
 			$indexfile = "{$filename}/index.html";
 
 			if(preg_match('#^[0-9]{6}$#', $file) && @is_dir($filename) && @is_writable($filename) && !file_exists($indexfile))

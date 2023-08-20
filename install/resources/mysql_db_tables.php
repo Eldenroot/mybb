@@ -82,10 +82,10 @@ $tables[] = "CREATE TABLE mybb_attachments (
   pid int unsigned NOT NULL default '0',
   posthash varchar(50) NOT NULL default '',
   uid int unsigned NOT NULL default '0',
-  filename varchar(120) NOT NULL default '',
+  filename varchar(255) NOT NULL default '',
   filetype varchar(120) NOT NULL default '',
   filesize int(10) unsigned NOT NULL default '0',
-  attachname varchar(120) NOT NULL default '',
+  attachname varchar(255) NOT NULL default '',
   downloads int unsigned NOT NULL default '0',
   dateuploaded int unsigned NOT NULL default '0',
   visible tinyint(1) NOT NULL default '0',
@@ -103,7 +103,8 @@ $tables[] = "CREATE TABLE mybb_attachtypes (
   maxsize int(15) unsigned NOT NULL default '0',
   icon varchar(100) NOT NULL default '',
   enabled tinyint(1) NOT NULL default '1',
-  groups TEXT NOT NULL,
+  forcedownload tinyint(1) NOT NULL default '0',
+  `groups` TEXT NOT NULL,
   forums TEXT NOT NULL,
   avatarfile tinyint(1) NOT NULL default '0',
   PRIMARY KEY (atid)
@@ -123,6 +124,7 @@ $tables[] = "CREATE TABLE mybb_awaitingactivation (
 $tables[] = "CREATE TABLE mybb_badwords (
   bid int unsigned NOT NULL auto_increment,
   badword varchar(100) NOT NULL default '',
+  regex tinyint(1) NOT NULL default '0',
   replacement varchar(100) NOT NULL default '',
   PRIMARY KEY (bid)
 ) ENGINE=MyISAM;";
@@ -143,7 +145,7 @@ $tables[] = "CREATE TABLE mybb_banned (
   oldgroup int unsigned NOT NULL default '0',
   oldadditionalgroups text NOT NULL,
   olddisplaygroup int unsigned NOT NULL default '0',
-  admin int unsigned NOT NULL default '0',
+  `admin` int unsigned NOT NULL default '0',
   dateline int unsigned NOT NULL default '0',
   bantime varchar(50) NOT NULL default '',
   lifted int unsigned NOT NULL default '0',
@@ -481,7 +483,7 @@ $tables[] = "CREATE TABLE mybb_modtools (
 	name varchar(200) NOT NULL,
 	description text NOT NULL,
 	forums text NOT NULL,
-	groups text NOT NULL,
+	`groups` text NOT NULL,
 	type char(1) NOT NULL default '',
 	postoptions text NOT NULL,
 	threadoptions text NOT NULL,
@@ -523,6 +525,7 @@ $tables[] = "CREATE TABLE mybb_pollvotes (
   uid int unsigned NOT NULL default '0',
   voteoption smallint unsigned NOT NULL default '0',
   dateline int unsigned NOT NULL default '0',
+  ipaddress varbinary(16) NOT NULL default '',
   KEY pid (pid, uid),
   PRIMARY KEY (vid)
 ) ENGINE=MyISAM;";
@@ -872,7 +875,7 @@ $tables[] = "CREATE TABLE mybb_threadprefixes (
 	prefix varchar(120) NOT NULL default '',
 	displaystyle varchar(200) NOT NULL default '',
 	forums text NOT NULL,
-	groups text NOT NULL,
+	`groups` text NOT NULL,
 	PRIMARY KEY (pid)
 ) ENGINE=MyISAM;";
 
@@ -1011,6 +1014,7 @@ $tables[] = "CREATE TABLE mybb_usergroups (
   canratemembers tinyint(1) NOT NULL default '0',
   canchangename tinyint(1) NOT NULL default '0',
   canbereported tinyint(1) NOT NULL default '0',
+  canbeinvisible tinyint(1) NOT NULL default '1',
   canchangewebsite tinyint(1) NOT NULL default '1',
   showforumteam tinyint(1) NOT NULL default '0',
   usereputationsystem tinyint(1) NOT NULL default '0',
@@ -1068,8 +1072,6 @@ $tables[] = "CREATE TABLE mybb_users (
   lastpost int unsigned NOT NULL default '0',
   website varchar(200) NOT NULL default '',
   icq varchar(10) NOT NULL default '',
-  aim varchar(50) NOT NULL default '',
-  yahoo varchar(50) NOT NULL default '',
   skype varchar(75) NOT NULL default '',
   google varchar(75) NOT NULL default '',
   birthday varchar(15) NOT NULL default '',
@@ -1128,7 +1130,8 @@ $tables[] = "CREATE TABLE mybb_users (
   suspendsigtime int unsigned NOT NULL default '0',
   coppauser tinyint(1) NOT NULL default '0',
   classicpostbit tinyint(1) NOT NULL default '0',
-  loginattempts smallint(2) unsigned NOT NULL default '1',
+  loginattempts smallint(2) unsigned NOT NULL default '0',
+  loginlockoutexpiry int unsigned NOT NULL default '0',
   usernotes text NOT NULL,
   sourceeditor tinyint(1) NOT NULL default '0',
   UNIQUE KEY username (username),

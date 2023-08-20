@@ -218,7 +218,7 @@ function fetch_wol_activity($location, $nopermission=false)
 			{
 				$parameters['action'] = '';
 			}
-			$accepted_parameters = array("markread", "help", "buddypopup", "smilies", "syndication", "imcenter", "dstswitch");
+			$accepted_parameters = array("markread", "help", "buddypopup", "smilies", "syndication", "dstswitch");
 			if($parameters['action'] == "whoposted")
 			{
 				if(!isset($parameters['tid']))
@@ -400,6 +400,10 @@ function fetch_wol_activity($location, $nopermission=false)
 			$user_activity['activity'] = "report";
 			break;
 		case "reputation":
+            if(!isset($parameters['action']))
+            {
+                $parameters['action'] = '';
+            }
 			if(!isset($parameters['uid']))
 			{
 				$parameters['uid'] = 0;
@@ -516,6 +520,14 @@ function fetch_wol_activity($location, $nopermission=false)
 			{
 				$user_activity['activity'] = "usercp_subscriptions";
 			}
+			elseif($parameters['action'] == "addfavorite" || $parameters['action'] == "removefavorite" || $parameters['action'] == "removefavorites")
+			{
+				$user_activity['activity'] = "usercp_managefavorites";
+			}
+			else if($parameters['action'] == "addsubscription" || $parameters['action'] == "do_addsubscription" || $parameters['action'] == "removesubscription" || $parameters['action'] == "removesubscriptions")
+			{
+				$user_activity['activity'] = "usercp_managesubscriptions";
+			}
 			elseif($parameters['action'] == "notepad" || $parameters['action'] == "do_notepad")
 			{
 				$user_activity['activity'] = "usercp_notepad";
@@ -523,20 +535,6 @@ function fetch_wol_activity($location, $nopermission=false)
 			else
 			{
 				$user_activity['activity'] = "usercp";
-			}
-			break;
-		case "usercp2":
-			if(!isset($parameters['action']))
-			{
-				$parameters['action'] = '';
-			}
-			if($parameters['action'] == "addfavorite" || $parameters['action'] == "removefavorite" || $parameters['action'] == "removefavorites")
-			{
-				$user_activity['activity'] = "usercp2_favorites";
-			}
-			else if($parameters['action'] == "addsubscription" || $parameters['action'] == "do_addsubscription" || $parameters['action'] == "removesubscription" || $parameters['action'] == "removesubscriptions")
-			{
-				$user_activity['activity'] = "usercp2_subscriptions";
 			}
 			break;
 		case "portal":
@@ -887,9 +885,6 @@ function build_friendly_wol_location($user_activity)
 		case "misc_syndication":
 			$location_name = $lang->viewing_syndication;
 			break;
-		case "misc_imcenter":
-			$location_name = $lang->viewing_imcenter;
-			break;
 		// modcp.php functions
 		case "modcp_modlogs":
 			$location_name = $lang->viewing_modlogs;
@@ -1088,10 +1083,10 @@ function build_friendly_wol_location($user_activity)
 		case "usercp":
 			$location_name = $lang->user_cp;
 			break;
-		case "usercp2_favorites":
+		case "usercp_managefavorites":
 			$location_name = $lang->managing_favorites;
 			break;
-		case "usercp2_subscriptions":
+		case "usercp_managesubscriptions":
 			$location_name = $lang->managing_subscriptions;
 			break;
 		case "portal":
@@ -1149,7 +1144,7 @@ function build_wol_row($user)
 		if($user['invisible'] != 1 || $mybb->usergroup['canviewwolinvis'] == 1 || $user['uid'] == $mybb->user['uid'])
 		{
 			// Append an invisible mark if the user is invisible
-			if($user['invisible'] == 1)
+			if($user['invisible'] == 1 && $mybb->usergroup['canbeinvisible'] == 1)
 			{
 				$invisible_mark = "*";
 			}
@@ -1173,7 +1168,7 @@ function build_wol_row($user)
 		$online_name = format_name($lang->guest, 1);
 	}
 
-	$online_time = my_date($mybb->settings['timeformat'], $user['time']);
+	$online_time = my_date('relative', $user['time']);
 
 	// Fetch the location name for this users activity
 	$location = build_friendly_wol_location($user['activity']);

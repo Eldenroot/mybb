@@ -31,6 +31,7 @@ $l['order'] = "Order";
 
 $l['subforums'] = "Sub Forums";
 $l['moderators'] = "Moderators";
+$l['forum_thread_prefixes'] = "Thread Prefixes";
 $l['permissions'] = "Permissions";
 $l['delete_forum'] = "Delete Forum";
 
@@ -50,6 +51,7 @@ $l['set_custom_perms'] = "Set Custom Permissions";
 
 $l['permissions_use_group_default'] = "Use Group Default";
 $l['permissions_group'] = "Group";
+$l['permissions_user'] = "User";
 $l['permissions_canview'] = "Can view?";
 $l['permissions_canpostthreads'] = "Can post threads?";
 $l['permissions_canpostreplys'] = "Can post replies?";
@@ -276,4 +278,4 @@ $l['polls_field_canvotepolls'] = "Can vote in polls?";
 $l['misc_field_cansearch'] = "Can search forum?";
 
 $l['confirm_proceed_deletion'] = "Click \"Proceed\" to continue the deletion of the forum.";
-$l['automatically_redirecting'] = "Automatically Redirecting...";
+$l['automatically_redirecting'] = "Automatically Redirecting&hellip;";

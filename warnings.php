@@ -22,6 +22,7 @@ require_once MYBB_ROOT."inc/class_parser.php";
 $parser = new postParser;
 
 $lang->load("warnings");
+$lang->load("datahandler_warnings");
 
 if($mybb->settings['enablewarningsystem'] == 0)
 {
@@ -115,6 +116,8 @@ if($mybb->input['action'] == "do_warn" && $mybb->request_method == "post")
 			if($mybb->settings['allowanonwarningpms'] == 1 && $mybb->get_input('pm_anonymous', MyBB::INPUT_INT))
 			{
 				$sender_uid = -1;
+				// Workaround for eliminating PHP warnings in PHP 8. Ref: https://github.com/mybb/mybb/issues/4630#issuecomment-1369144163
+				$pm['sender']['uid'] = -1;
 			}
 
 			// Some kind of friendly error notification
@@ -123,7 +126,7 @@ if($mybb->input['action'] == "do_warn" && $mybb->request_method == "post")
 				$warningshandler->friendly_action .= $lang->redirect_warned_pmerror;
 			}
 		}
-	
+
 		$plugins->run_hooks("warnings_do_warn_end");
 
 		$lang->redirect_warned = $lang->sprintf($lang->redirect_warned, htmlspecialchars_uni($user['username']), $warningshandler->new_warning_level, $warningshandler->friendly_action);
@@ -230,11 +233,11 @@ if($mybb->input['action'] == "warn")
 			WHERE w.pid='".$mybb->get_input('pid', MyBB::INPUT_INT)."'
 			ORDER BY w.expired ASC, w.dateline DESC
 		");
-		$first = true;
+		$last_expired = -1;
 		$warnings = '';
 		while($warning = $db->fetch_array($query))
 		{
-			if($warning['expired'] != $last_expired || $first)
+			if($warning['expired'] != $last_expired)
 			{
 				if($warning['expired'] == 0)
 				{
@@ -246,7 +249,6 @@ if($mybb->input['action'] == "warn")
 				}
 			}
 			$last_expired = $warning['expired'];
-			$first = false;
 
 			$post_link = "";
 			$warning['username'] = htmlspecialchars_uni($warning['username']);
@@ -274,7 +276,7 @@ if($mybb->input['action'] == "warn")
 				}
 				else
 				{
-					$expires = my_date('normal', $warning['expires']);
+					$expires = nice_time($warning['expires']-TIME_NOW);
 				}
 			}
 			else
@@ -299,7 +301,7 @@ if($mybb->input['action'] == "warn")
 	}
 
 	$plugins->run_hooks("warnings_warn_start");
-	
+
 	$type_checked = array('custom' => '');
 	$expires_period = array('hours' => '', 'days' => '', 'weeks' => '', 'months' => '', 'never' => '');
 	$send_pm_checked = '';
@@ -322,9 +324,9 @@ if($mybb->input['action'] == "warn")
 		$custom_reason = htmlspecialchars_uni($mybb->get_input('custom_reason'));
 		$custom_points = $mybb->get_input('custom_points', MyBB::INPUT_INT);
 		$expires = $mybb->get_input('expires', MyBB::INPUT_INT);
-		if($mybb->get_input('expires_period', MyBB::INPUT_INT))
+		if($mybb->get_input('expires_period'))
 		{
-			$expires_period[$mybb->get_input('expires_period', MyBB::INPUT_INT)] = "selected=\"selected\"";
+			$expires_period[$mybb->get_input('expires_period')] = "selected=\"selected\"";
 		}
 	}
 	else
@@ -654,7 +656,7 @@ if($mybb->input['action'] == "view")
 		}
 		else
 		{
-			$expires = my_date('normal', $warning['expires']);
+			$expires = my_date('normal', $warning['expires']); // Purposely not using nice_time here as the moderator has clicked for more details so the actual day/time should be shown
 		}
 		$status = $lang->warning_active;
 	}
@@ -840,7 +842,7 @@ if(!$mybb->input['action'])
 			}
 			else
 			{
-				$expires = my_date('normal', $warning['expires']);
+				$expires = nice_time($warning['expires']-TIME_NOW);
 			}
 		}
 		else

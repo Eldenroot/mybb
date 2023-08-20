@@ -69,34 +69,38 @@ $pid = $attachment['pid'];
 if($pid || $attachment['uid'] != $mybb->user['uid'])
 {
 	$post = get_post($pid);
-	$thread = get_thread($post['tid']);
-
-	if(!$thread && !isset($mybb->input['thumbnail']))
+	// Check permissions if the post is not a draft
+	if($post['visible'] != -2)
 	{
-		error($lang->error_invalidthread);
-	}
-	$fid = $thread['fid'];
+		$thread = get_thread($post['tid']);
 
-	// Get forum info
-	$forum = get_forum($fid);
+		if(!$thread && !isset($mybb->input['thumbnail']))
+		{
+			error($lang->error_invalidthread);
+		}
+		$fid = $thread['fid'];
 
-	// Permissions
-	$forumpermissions = forum_permissions($fid);
+		// Get forum info
+		$forum = get_forum($fid);
 
-	if($forumpermissions['canview'] == 0 || $forumpermissions['canviewthreads'] == 0 || (isset($forumpermissions['canonlyviewownthreads']) && $forumpermissions['canonlyviewownthreads'] != 0 && $thread['uid'] != $mybb->user['uid']) || ($forumpermissions['candlattachments'] == 0 && !$mybb->input['thumbnail']))
-	{
-		error_no_permission();
-	}
+		// Permissions
+		$forumpermissions = forum_permissions($fid);
 
-	// Error if attachment is invalid or not visible
-	if(!$attachment['attachname'] || (!is_moderator($fid, "canviewunapprove") && ($attachment['visible'] != 1 || $thread['visible'] != 1 || $post['visible'] != 1)))
-	{
-		error($lang->error_invalidattachment);
-	}
+		if($forumpermissions['canview'] == 0 || $forumpermissions['canviewthreads'] == 0 || (isset($forumpermissions['canonlyviewownthreads']) && $forumpermissions['canonlyviewownthreads'] != 0 && $thread['uid'] != $mybb->user['uid']) || ($forumpermissions['candlattachments'] == 0 && !$mybb->input['thumbnail']))
+		{
+			error_no_permission();
+		}
 
-	if($attachtype['forums'] != -1 && strpos(','.$attachtype['forums'].',', ','.$fid.',') === false)
-	{
-		error_no_permission();
+		// Error if attachment is invalid or not visible
+		if(!$attachment['attachname'] || (!is_moderator($fid, "canviewunapprove") && ($attachment['visible'] != 1 || $thread['visible'] != 1 || $post['visible'] != 1)))
+		{
+			error($lang->error_invalidattachment);
+		}
+
+		if($attachtype['forums'] != -1 && strpos(','.$attachtype['forums'].',', ','.$fid.',') === false)
+		{
+			error_no_permission();
+		}
 	}
 }
 
@@ -116,11 +120,13 @@ if(!isset($mybb->input['thumbnail'])) // Only increment the download count if th
 // basename isn't UTF-8 safe. This is a workaround.
 $attachment['filename'] = ltrim(basename(' '.$attachment['filename']));
 
+$uploadspath_abs = mk_path_abs($mybb->settings['uploadspath']);
+
 $plugins->run_hooks("attachment_end");
 
 if(isset($mybb->input['thumbnail']))
 {
-	if(!file_exists($mybb->settings['uploadspath']."/".$attachment['thumbnail']))
+	if(!file_exists($uploadspath_abs."/".$attachment['thumbnail']))
 	{
 		error($lang->error_invalidattachment);
 	}
@@ -149,7 +155,7 @@ if(isset($mybb->input['thumbnail']))
 
 	header("Content-disposition: filename=\"{$attachment['filename']}\"");
 	header("Content-type: ".$type);
-	$thumb = $mybb->settings['uploadspath']."/".$attachment['thumbnail'];
+	$thumb = $uploadspath_abs."/".$attachment['thumbnail'];
 	header("Content-length: ".@filesize($thumb));
 	$handle = fopen($thumb, 'rb');
 	while(!feof($handle))
@@ -160,7 +166,7 @@ if(isset($mybb->input['thumbnail']))
 }
 else
 {
-	if(!file_exists($mybb->settings['uploadspath']."/".$attachment['attachname']))
+	if(!file_exists($uploadspath_abs."/".$attachment['attachname']))
 	{
 		error($lang->error_invalidattachment);
 	}
@@ -177,7 +183,14 @@ else
 		case "image/png":
 		case "text/plain":
 			header("Content-type: {$attachment['filetype']}");
-			$disposition = "inline";
+			if(!empty($attachtypes[$ext]['forcedownload']))
+			{
+				$disposition = "attachment";
+			}
+			else
+			{
+				$disposition = "inline";
+			}
 			break;
 
 		default:
@@ -208,7 +221,7 @@ else
 
 	header("Content-length: {$attachment['filesize']}");
 	header("Content-range: bytes=0-".($attachment['filesize']-1)."/".$attachment['filesize']);
-	$handle = fopen($mybb->settings['uploadspath']."/".$attachment['attachname'], 'rb');
+	$handle = fopen($uploadspath_abs."/".$attachment['attachname'], 'rb');
 	while(!feof($handle))
 	{
 		echo fread($handle, 8192);

@@ -206,11 +206,13 @@ function make_parent_list($fid, $navsep=",")
 	reset($pforumcache);
 	reset($pforumcache[$fid]);
 
+	$navigation = '';
+
 	foreach($pforumcache[$fid] as $key => $forum)
 	{
 		if($fid == $forum['fid'])
 		{
-			if($pforumcache[$forum['pid']])
+			if(!empty($pforumcache[$forum['pid']]))
 			{
 				$navigation = make_parent_list($forum['pid'], $navsep).$navigation;
 			}
@@ -264,9 +266,9 @@ function save_quick_perms($fid)
 		$db->delete_query("forumpermissions", "fid='{$fid}' AND gid='{$usergroup['gid']}'");
 
 		// Only insert the new ones if we're using custom permissions
-		if($inherit[$usergroup['gid']] != 1)
+		if(empty($inherit[$usergroup['gid']]))
 		{
-			if($canview[$usergroup['gid']] == 1)
+			if(!empty($canview[$usergroup['gid']]))
 			{
 				$pview = 1;
 			}
@@ -275,7 +277,7 @@ function save_quick_perms($fid)
 				$pview = 0;
 			}
 
-			if($canpostthreads[$usergroup['gid']] == 1)
+			if(!empty($canpostthreads[$usergroup['gid']]))
 			{
 				$pthreads = 1;
 			}
@@ -284,7 +286,7 @@ function save_quick_perms($fid)
 				$pthreads = 0;
 			}
 
-			if($canpostreplies[$usergroup['gid']] == 1)
+			if(!empty($canpostreplies[$usergroup['gid']]))
 			{
 				$preplies = 1;
 			}
@@ -293,7 +295,7 @@ function save_quick_perms($fid)
 				$preplies = 0;
 			}
 
-			if($canpostpolls[$usergroup['gid']] == 1)
+			if(!empty($canpostpolls[$usergroup['gid']]))
 			{
 				$ppolls = 1;
 			}
@@ -327,7 +329,7 @@ function save_quick_perms($fid)
 					continue;
 				}
 
-				$insertquery[$db->escape_string($field)] = (int)$existing_permissions[$field];
+				$insertquery[$db->escape_string($field)] = isset($existing_permissions[$field]) ? (int)$existing_permissions[$field] : 0;
 			}
 
 			$db->insert_query("forumpermissions", $insertquery);
@@ -357,7 +359,10 @@ function check_admin_permissions($action, $error = true)
 	{
 		$func = $action['module']."_admin_permissions";
 		$permissions = $func();
-		if($permissions['permissions'][$action['action']] && $mybb->admin['permissions'][$action['module']][$action['action']] != 1)
+		if(
+			!empty($permissions['permissions'][$action['action']]) &&
+			empty($mybb->admin['permissions'][$action['module']][$action['action']])
+		)
 		{
 			if($error)
 			{
@@ -502,10 +507,12 @@ function get_admin_permissions($get_uid=0, $get_gid=0)
 		{
 			return $final_group_perms;
 		}
-		else
+		elseif(isset($perms_def))
 		{
 			return $perms_def;
 		}
+
+		return array();
 	}
 }
 
@@ -605,6 +612,11 @@ function login_attempt_check_acp($uid=0, $return_num=false)
 	{
 		$query = $db->simple_select("adminoptions", "loginattempts, loginlockoutexpiry", "uid='".(int)$uid."'", 1);
 		$attempts = $db->fetch_array($query);
+
+		if(!$attempts)
+		{
+			return false;
+		}
 	}
 
 	if($attempts['loginattempts'] <= 0)
@@ -724,7 +736,7 @@ function delete_user_posts($uid, $date)
 		{
 			while($post = $db->fetch_array($query))
 			{
-				if($post['usepostcounts'] != 0 && $post['visible'] != 0)
+				if($post['usepostcounts'] != 0 && $post['visible'] == 1)
 				{
 					++$post_count;
 				}
@@ -800,4 +812,72 @@ function print_selection_javascript()
 		}
 	}
 </script>";
+}
+
+if(!function_exists('array_column'))
+{
+	function array_column($input, $column_key)
+	{
+		$values = array();
+
+		if(!is_array($input))
+		{
+			$input = array($input);
+		}
+
+		foreach($input as $val)
+		{
+			if(is_array($val) && isset($val[$column_key]))
+			{
+				$values[] = $val[$column_key];
+			}
+			elseif(is_object($val) && isset($val->$column_key))
+			{
+				$values[] = $val->$column_key;
+			}
+		}
+
+		return $values;
+	}
+}
+
+/**
+ * Output the auto redirect block.
+ *
+ * @param \Form $form An existing form instance to wrap the redirect within.
+ * @param string $prompt The prompt to show.
+ */
+function output_auto_redirect($form, $prompt)
+{
+	global $lang;
+
+	echo <<<HTML
+<div class="confirm_action">
+	<p>{$prompt}</p>
+	<br />
+	<script type="text/javascript">
+		$(function() { 
+			var button = $("#proceed_button"); 
+			if (button.length > 0) {
+				// create a temporary div element to render the text within, un-escaping HTML entities
+				var textElement = $('<div/>').html('{$lang->automatically_redirecting}');
+			
+				button.val(textElement.text());
+				button.attr("disabled", true);
+				button.css("color", "#aaa");
+				button.css("borderColor", "#aaa");
+				
+				var parent_form = button.closest('form');
+
+				if (parent_form.length > 0) {
+					parent_form.submit();
+				}
+			}
+		});
+	</script>
+	<p class="buttons">
+		{$form->generate_submit_button($lang->proceed, array('class' => 'button_yes', 'id' => 'proceed_button'))}
+	</p>
+</div>
+HTML;
 }

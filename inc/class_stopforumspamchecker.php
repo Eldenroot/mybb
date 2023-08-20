@@ -18,7 +18,7 @@ class StopForumSpamChecker
 	 *
 	 * @var string
 	 */
-	const STOP_FORUM_SPAM_API_URL_FORMAT = 'http://www.stopforumspam.com/api?username=%s&email=%s&ip=%s&f=json&confidence';
+	const STOP_FORUM_SPAM_API_URL_FORMAT = 'https://api.stopforumspam.org/api?username=%s&email=%s&ip=%s&f=json&confidence';
 	/**
 	 * @var pluginSystem
 	 */
@@ -85,52 +85,78 @@ class StopForumSpamChecker
 	public function is_user_a_spammer($username = '', $email = '', $ip_address = '')
 	{
 		$is_spammer = false;
-		$confidence = 0;
+		$checknum = $confidence = 0;
 
-		if(filter_var($email, FILTER_VALIDATE_EMAIL) && filter_var($ip_address, FILTER_VALIDATE_IP)) // Calls to the API with invalid email/ip formats cause issues
+		if(!filter_var($email, FILTER_VALIDATE_EMAIL))
 		{
-			$username_encoded = urlencode($username);
-			$email_encoded    = urlencode($email);
+			throw new Exception("stopforumspam_invalid_email");
+		}
 
-			$check_url = sprintf(self::STOP_FORUM_SPAM_API_URL_FORMAT, $username_encoded, $email_encoded, $ip_address);
+		if(!filter_var($ip_address, FILTER_VALIDATE_IP))
+		{
+			throw new Exception('stopforumspam_invalid_ip_address');
+		}
 
-			$result = fetch_remote_file($check_url);
+		$is_internal_ip = !filter_var(
+			$ip_address,
+			FILTER_VALIDATE_IP,
+			FILTER_FLAG_NO_PRIV_RANGE |  FILTER_FLAG_NO_RES_RANGE
+		);
 
-			if($result !== false)
+		if($is_internal_ip)
+		{
+			return false;
+		}
+
+		$username_encoded = urlencode($username);
+		$email_encoded    = urlencode($email);
+
+		$check_url = sprintf(self::STOP_FORUM_SPAM_API_URL_FORMAT, $username_encoded, $email_encoded, $ip_address);
+
+		$result = fetch_remote_file($check_url);
+
+		if($result !== false)
+		{
+			$result_json = @json_decode($result);
+
+			if($result_json != null && !isset($result_json->error))
 			{
-				$result_json = @json_decode($result);
-
-				if($result_json != null && !isset($result_json->error))
+				if($this->check_usernames && $result_json->username->appears)
 				{
-					if($this->check_usernames && $result_json->username->appears)
-					{
-						$confidence += $result_json->username->confidence;
-					}
-
-					if($this->check_emails && $result_json->email->appears)
-					{
-						$confidence += $result_json->email->confidence;
-					}
-
-					if($this->check_ips && $result_json->ip->appears)
-					{
-						$confidence += $result_json->ip->confidence;
-					}
-
-					if($confidence > $this->min_weighting_before_spam)
-					{
-						$is_spammer = true;
-					}
+					$checknum++;
+					$confidence += $result_json->username->confidence;
 				}
-				else
+
+				if($this->check_emails && $result_json->email->appears)
 				{
-					throw new Exception('stopforumspam_error_decoding');
+					$checknum++;
+					$confidence += $result_json->email->confidence;
+				}
+
+				if($this->check_ips && $result_json->ip->appears)
+				{
+					$checknum++;
+					$confidence += $result_json->ip->confidence;
+				}
+				
+				if($checknum > 0 && $confidence)
+				{
+					$confidence = $confidence / $checknum;
+				}
+
+				if($confidence > $this->min_weighting_before_spam)
+				{
+					$is_spammer = true;
 				}
 			}
 			else
 			{
-				throw new Exception('stopforumspam_error_retrieving');
+				throw new Exception('stopforumspam_error_decoding');
 			}
+		}
+		else
+		{
+			throw new Exception('stopforumspam_error_retrieving');
 		}
 
 		if($this->plugins)
@@ -181,7 +207,7 @@ class StopForumSpamChecker
 				continue;
 			}
 
-			if($setting = 'stopforumspam_check_ips' && $mybb->settings[$setting])
+			if($setting == 'stopforumspam_check_ips' && $mybb->settings[$setting])
 			{
 				$settingsenabled[] = $lang->sfs_error_ip;
 				continue;

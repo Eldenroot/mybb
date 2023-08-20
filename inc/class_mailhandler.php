@@ -35,6 +35,13 @@ class MailHandler
 	public $from;
 
 	/**
+	 * Full from string including name in format "name" <email>
+	 *
+	 * @var string
+	 */
+	public $from_named;
+
+	/**
 	 * Who the email should return to.
 	 *
 	 * @var string
@@ -150,18 +157,13 @@ class MailHandler
 		if($from)
 		{
 			$this->from = $from;
+			$this->from_named = $this->from;
 		}
 		else
 		{
-			if($mybb->settings['mail_handler'] == 'smtp')
-			{
-				$this->from = $this->get_from_email();
-			}
-			else
-			{
-				$this->from = '"'.$this->utf8_encode($mybb->settings['bbname']).'"';
-				$this->from .= " <".$this->get_from_email().">";
-			}
+			$this->from = $this->get_from_email();
+			$this->from_named = '"'.$this->utf8_encode($mybb->settings['bbname']).'"';
+			$this->from_named .= " <".$this->from.">";
 		}
 
 		if($return_email)
@@ -170,7 +172,6 @@ class MailHandler
 		}
 		else
 		{
-			$this->return_email = "";
 			$this->return_email = $this->get_from_email();
 		}
 
@@ -312,7 +313,7 @@ class MailHandler
 		global $mybb;
 
 		// Build mail headers
-		$this->headers .= "From: {$this->from}{$this->delimiter}";
+		$this->headers .= "From: {$this->from_named}{$this->delimiter}";
 
 		if($this->return_email)
 		{
@@ -419,10 +420,13 @@ class MailHandler
 			{
 				$newpos = min($pos + $chunk_size, $len);
 
-				while(ord($string[$newpos]) >= 0x80 && ord($string[$newpos]) < 0xC0)
+				if($newpos != $len)
 				{
-					// Reduce len until it's safe to split UTF-8.
-					$newpos--;
+					while(ord($string[$newpos]) >= 0x80 && ord($string[$newpos]) < 0xC0)
+					{
+						// Reduce len until it's safe to split UTF-8.
+						$newpos--;
+					}
 				}
 
 				$chunk = substr($string, $pos, $newpos - $pos);

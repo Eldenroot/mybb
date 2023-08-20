@@ -71,7 +71,7 @@ class LoginDataHandler extends DataHandler
 			{
 				$mybb->cookies['loginattempts'] = 0;
 			}
-			if($mybb->settings['failedcaptchalogincount'] > 0 && ($user['loginattempts'] > $mybb->settings['failedcaptchalogincount'] || (int)$mybb->cookies['loginattempts'] > $mybb->settings['failedcaptchalogincount']))
+			if($mybb->settings['failedcaptchalogincount'] > 0 && (isset($user['loginattempts']) && $user['loginattempts'] > $mybb->settings['failedcaptchalogincount'] || (int)$mybb->cookies['loginattempts'] > $mybb->settings['failedcaptchalogincount']))
 			{
 				$this->captcha_verified = false;
 				$this->verify_captcha();
@@ -128,7 +128,7 @@ class LoginDataHandler extends DataHandler
 	{
 		$this->get_login_data();
 
-		if(!$this->login_data['uid'])
+		if(empty($this->login_data) || !$this->login_data['uid'])
 		{
 			$this->invalid_combination();
 			return false;
@@ -171,14 +171,6 @@ class LoginDataHandler extends DataHandler
 
 		if($strict == true)
 		{
-			if(!$this->login_data['salt'])
-			{
-				// Generate a salt for this user and assume the password stored in db is a plain md5 password
-				$password_fields = create_password($this->login_data['password']);
-				$this->login_data = array_merge($this->login_data, $password_fields);
-				$db->update_query("users", $password_fields, "uid = '{$this->login_data['uid']}'");
-			}
-
 			if(!$this->login_data['loginkey'])
 			{
 				$this->login_data['loginkey'] = generate_loginkey();
@@ -218,9 +210,9 @@ class LoginDataHandler extends DataHandler
 		$login_text = '';
 		if($show_login_attempts)
 		{
-			if($mybb->settings['failedlogincount'] != 0 && $mybb->settings['failedlogintext'] == 1)
+			if($mybb->settings['failedlogincount'] != 0 && $mybb->settings['failedlogintext'] == 1 && $this->login_data['uid'] != 0)
 			{
-				$logins = login_attempt_check(false) + 1;
+				$logins = login_attempt_check($this->login_data['uid'], false) + 1;
 				$login_text = $lang->sprintf($lang->failed_login_again, $mybb->settings['failedlogincount'] - $logins);
 			}
 		}
@@ -310,9 +302,6 @@ class LoginDataHandler extends DataHandler
 		my_setcookie('loginattempts', 1);
 		my_setcookie("sid", $session->sid, -1, true);
 
-		$ip_address = $db->escape_binary($session->packedip);
-		$db->delete_query("sessions", "ip = {$ip_address} AND sid != '{$session->sid}'");
-
 		$newsession = array(
 			"uid" => $user['uid'],
 		);
@@ -326,8 +315,8 @@ class LoginDataHandler extends DataHandler
 			$remember = -1;
 		}
 
-		my_setcookie("mybbuser", $user['uid']."_".$user['loginkey'], $remember, true);
-		
+		my_setcookie("mybbuser", $user['uid']."_".$user['loginkey'], $remember, true, "lax");
+
 		if($this->captcha !== false)
 		{
 			$this->captcha->invalidate_captcha();

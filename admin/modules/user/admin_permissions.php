@@ -49,7 +49,7 @@ if($mybb->input['action'] == "delete")
 		admin_redirect("index.php?module=user-admin_permissions");
 	}
 
-	if($mybb->input['no'])
+	if($mybb->get_input('no'))
 	{
 		admin_redirect("index.php?module=user-admin_permissions");
 	}
@@ -122,18 +122,21 @@ if($mybb->input['action'] == "edit")
 	{
 		foreach($mybb->input['permissions'] as $module => $actions)
 		{
-			$no_access = 0;
-			foreach($actions as $action => $access)
+			if(is_array($actions))
 			{
-				if($access == 0)
+				$no_access = 0;
+				foreach($actions as $action => $access)
 				{
-					++$no_access;
+					if($access == 0)
+					{
+						++$no_access;
+					}
 				}
-			}
-			// User can't access any actions in this module - just disallow it completely
-			if($no_access == count($actions))
-			{
-				unset($mybb->input['permissions'][$module]);
+				// User can't access any actions in this module - just disallow it completely
+				if($no_access == count($actions))
+				{
+					unset($mybb->input['permissions'][$module]);
+				}
 			}
 		}
 
@@ -294,6 +297,11 @@ if($mybb->input['action'] == "edit")
 		$form_container = new FormContainer("{$module['name']}");
 		foreach($module['permissions'] as $action => $title)
 		{
+			if(!isset($permission_data[$key][$action]))
+			{
+				$permission_data[$key][$action] = 0;
+			}
+
 			$form_container->output_row($title, "", $form->generate_yes_no_radio('permissions['.$key.']['.$action.']', (int)$permission_data[$key][$action], array('yes' => 1, 'no' => 0)), 'permissions['.$key.']['.$action.']');
 		}
 		$form_container->end();
@@ -339,6 +347,9 @@ if($mybb->input['action'] == "group")
 			$perm_type = "default";
 		}
 		$uid = -$group['gid'];
+
+		$group['title'] = htmlspecialchars_uni($group['title']);
+
 		$table->construct_cell("<div class=\"float_right\"><img src=\"styles/{$page->style}/images/icons/{$perm_type}.png\" title=\"{$lang->permissions_type_group}\" alt=\"{$perm_type}\" /></div><div><strong><a href=\"index.php?module=user-admin_permissions&amp;action=edit&amp;uid={$uid}\" title=\"{$lang->edit_group}\">{$group['title']}</a></strong><br /></div>");
 
 		if($group['permissions'] != "")
@@ -347,7 +358,7 @@ if($mybb->input['action'] == "group")
 			$popup->add_item($lang->edit_permissions, "index.php?module=user-admin_permissions&amp;action=edit&amp;uid={$uid}");
 
 			// Check permissions for Revoke
-			$popup->add_item($lang->revoke_permissions, "index.php?module=user-admin_permissions&amp;action=delete&amp;uid={$uid}&amp;my_post_key={$mybb->post_code}", "return AdminCP.deleteConfirmation(this, 'Are you sure you wish to revoke this group\'s permissions?')");
+			$popup->add_item($lang->revoke_permissions, "index.php?module=user-admin_permissions&amp;action=delete&amp;uid={$uid}&amp;my_post_key={$mybb->post_code}", "return AdminCP.deleteConfirmation(this, '$lang->confirm_perms_deletion3')");
 			$table->construct_cell($popup->fetch(), array("class" => "align_center"));
 		}
 		else
@@ -443,6 +454,8 @@ if(!$mybb->input['action'])
 		");
 		while($admin = $db->fetch_array($query))
 		{
+			$perm_type = "default";
+
 			if($admin['permissions'] != "")
 			{
 				$perm_type = "user";
@@ -459,20 +472,15 @@ if(!$mybb->input['action'])
 						break;
 					}
 				}
-
-				if(!$group_permissions)
-				{
-					$perm_type = "default";
-				}
 			}
 
 			$usergroup_list = array();
 
 			// Build a list of group memberships that have access to the Admin CP
 			// Primary usergroup?
-			if($usergroups[$admin['usergroup']]['cancp'] == 1)
+			if(!empty($usergroups[$admin['usergroup']]) && $usergroups[$admin['usergroup']]['cancp'] == 1)
 			{
-				$usergroup_list[] = "<i>".$usergroups[$admin['usergroup']]['title']."</i>";
+				$usergroup_list[] = "<i>".htmlspecialchars_uni($usergroups[$admin['usergroup']]['title'])."</i>";
 			}
 
 			// Secondary usergroups?
@@ -481,16 +489,16 @@ if(!$mybb->input['action'])
 			{
 				foreach($additional_groups as $gid)
 				{
-					if($usergroups[$gid]['cancp'] == 1)
+					if(!empty($usergroups[$gid]) && $usergroups[$gid]['cancp'] == 1)
 					{
-						$usergroup_list[] = $usergroups[$gid]['title'];
+						$usergroup_list[] = htmlspecialchars_uni($usergroups[$gid]['title']);
 					}
 				}
 			}
 			$usergroup_list = implode($lang->comma, $usergroup_list);
 
 			$username = htmlspecialchars_uni($admin['username']);
-			$table->construct_cell("<div class=\"float_right\"><img src=\"styles/{$page->style}/images/icons/{$perm_type}.png\" title=\"{$lang->perms_type_user}\" alt=\"{$perm_type}\" /></div><div><strong><a href=\"index.php?module=user-admin_permissions&amp;action=edit&amp;uid={$admin['uid']}\" title=\"{$lang->edit_user}\">{$username}</a></strong><br /><small>{$usergroup_list}</small></div>");
+			$table->construct_cell("<div class=\"float_right\"><img src=\"styles/{$page->style}/images/icons/{$perm_type}.png\" title=\"{$lang->permissions_type_user}\" alt=\"{$perm_type}\" /></div><div><strong><a href=\"index.php?module=user-admin_permissions&amp;action=edit&amp;uid={$admin['uid']}\" title=\"{$lang->edit_user}\">{$username}</a></strong><br /><small>{$usergroup_list}</small></div>");
 
 			$table->construct_cell(my_date('relative', $admin['lastactive']), array("class" => "align_center"));
 

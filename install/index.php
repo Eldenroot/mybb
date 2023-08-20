@@ -52,15 +52,15 @@ if(file_exists(MYBB_ROOT."/inc/config.php"))
 	}
 }
 
-require_once MYBB_ROOT.'inc/class_xml.php';
 require_once MYBB_ROOT.'inc/functions_user.php';
 require_once MYBB_ROOT.'inc/class_language.php';
 $lang = new MyLanguage();
-$lang->set_path(MYBB_ROOT.'install/resources');
+$lang->set_path(INSTALL_ROOT.'resources');
 $lang->load('language');
 
 // Load DB interface
 require_once MYBB_ROOT."inc/db_base.php";
+require_once MYBB_ROOT."inc/AbstractPdoDbDriver.php";
 
 // Prevent any shut down functions from running
 $done_shutdown = 1;
@@ -106,7 +106,7 @@ if(function_exists('pg_connect'))
 		'title' => 'PostgreSQL',
 		'short_title' => 'PostgreSQL',
 		'structure_file' => 'pgsql_db_tables.php',
-		'population_file' => 'mysql_db_inserts.php'
+		'population_file' => 'pgsql_db_inserts.php'
 	);
 }
 
@@ -120,6 +120,26 @@ if(class_exists('PDO'))
 			'title' => 'SQLite 3',
 			'short_title' => 'SQLite',
 			'structure_file' => 'sqlite_db_tables.php',
+			'population_file' => 'pgsql_db_inserts.php'
+		);
+	}
+
+	if (in_array('pgsql', $supported_dbs)) {
+		$dboptions['pgsql_pdo'] = array(
+			'class' => 'PostgresPdoDbDriver',
+			'title' => 'PostgreSQL (PDO)',
+			'short_title' => 'PostgreSQL (PDO)',
+			'structure_file' => 'pgsql_db_tables.php',
+			'population_file' => 'pgsql_db_inserts.php'
+		);
+	}
+
+	if (in_array('mysql', $supported_dbs)) {
+		$dboptions['mysql_pdo'] = array(
+			'class' => 'MysqlPdoDbDriver',
+			'title' => 'MySQL (PDO)',
+			'short_title' => 'MySQL (PDO)',
+			'structure_file' => 'mysql_db_tables.php',
 			'population_file' => 'mysql_db_inserts.php'
 		);
 	}
@@ -1118,8 +1138,8 @@ function requirements_check()
 	else
 	{
 		$configstatus = $lang->sprintf($lang->req_step_span_pass, $lang->writable);
+		@fclose($configwritable);
 	}
-	@fclose($configwritable);
 
 	// Check settings file is writable
 	$settingswritable = @fopen(MYBB_ROOT.'inc/settings.php', 'w');
@@ -1132,8 +1152,8 @@ function requirements_check()
 	else
 	{
 		$settingsstatus = $lang->sprintf($lang->req_step_span_pass, $lang->writable);
+		@fclose($settingswritable);
 	}
-	@fclose($settingswritable);
 
 	// Check cache directory is writable
 	$cachewritable = @fopen(MYBB_ROOT.'cache/test.write', 'w');
@@ -1142,7 +1162,6 @@ function requirements_check()
 		$errors[] = $lang->sprintf($lang->req_step_error_box, $lang->req_step_error_cachedir);
 		$cachestatus = $lang->sprintf($lang->req_step_span_fail, $lang->not_writable);
 		$showerror = 1;
-		@fclose($cachewritable);
 	}
 	else
 	{
@@ -1160,7 +1179,6 @@ function requirements_check()
 		$errors[] = $lang->sprintf($lang->req_step_error_box, $lang->req_step_error_uploaddir);
 		$uploadsstatus = $lang->sprintf($lang->req_step_span_fail, $lang->not_writable);
 		$showerror = 1;
-		@fclose($uploadswritable);
 	}
 	else
 	{
@@ -1178,7 +1196,6 @@ function requirements_check()
 		$errors[] =  $lang->sprintf($lang->req_step_error_box, $lang->req_step_error_avatardir);
 		$avatarsstatus = $lang->sprintf($lang->req_step_span_fail, $lang->not_writable);
 		$showerror = 1;
-		@fclose($avatarswritable);
 	}
 	else
 	{
@@ -1424,13 +1441,24 @@ function create_tables()
 		case "pgsql":
 			$db = new DB_PgSQL;
 			break;
+		case "pgsql_pdo":
+			$db = new PostgresPdoDbDriver();
+			break;
 		case "mysqli":
 			$db = new DB_MySQLi;
+			break;
+		case "mysql_pdo":
+			$db = new MysqlPdoDbDriver();
 			break;
 		default:
 			$db = new DB_MySQL;
 	}
  	$db->error_reporting = 0;
+
+	if(!isset($config['encoding']))
+	{
+		$config['encoding'] = null;
+	}
 
 	$connect_array = array(
 		"hostname" => $config['dbhost'],
@@ -1443,12 +1471,12 @@ function create_tables()
 	$connection = $db->connect($connect_array);
 	if($connection === false)
 	{
-		$errors[] = $lang->sprintf($lang->db_step_error_noconnect, $config['dbhost']);
+		$errors[] = $lang->sprintf($lang->db_step_error_noconnect, htmlspecialchars_uni($config['dbhost']));
 	}
 	// double check if the DB exists for MySQL
 	elseif(method_exists($db, 'select_db') && !$db->select_db($config['dbname']))
 	{
-		$errors[] = $lang->sprintf($lang->db_step_error_nodbname, $config['dbname']);
+		$errors[] = $lang->sprintf($lang->db_step_error_nodbname, htmlspecialchars_uni($config['dbname']));
 	}
 
 	// Most DB engines only allow certain characters in the table name. Oracle requires an alphabetic character first.
@@ -1464,7 +1492,7 @@ function create_tables()
 		$errors[] = $lang->db_step_error_tableprefix_too_long;
 	}
 
-	if(($db->engine == 'mysql' || $db->engine == 'mysqli') && $config['encoding'] == 'utf8mb4' && version_compare($db->get_version(), '5.5.3', '<'))
+	if($connection !== false && ($db->engine == 'mysql' || $db->engine == 'mysqli') && $config['encoding'] == 'utf8mb4' && version_compare($db->get_version(), '5.5.3', '<'))
 	{
 		$errors[] = $lang->db_step_error_utf8mb4_error;
 	}
@@ -1477,14 +1505,12 @@ function create_tables()
 	// Decide if we can use a database encoding or not
 	if($db->fetch_db_charsets() != false)
 	{
-		$db_encoding = "\$config['database']['encoding'] = '{$config['encoding']}';";
+		$db_encoding = "\$config['database']['encoding'] = '".addcslashes($config['encoding'], "'")."';";
 	}
 	else
 	{
-		$db_encoding = "// \$config['database']['encoding'] = '{$config['encoding']}';";
+		$db_encoding = "// \$config['database']['encoding'] = '".addcslashes($config['encoding'], "'")."';";
 	}
-
-	$config['dbpass'] = addslashes($config['dbpass']);
 
 	// Write the configuration file
 	$configdata = "<?php
@@ -1496,13 +1522,13 @@ function create_tables()
  * https://docs.mybb.com/
  */
 
-\$config['database']['type'] = '{$mybb->input['dbengine']}';
-\$config['database']['database'] = '{$config['dbname']}';
-\$config['database']['table_prefix'] = '{$config['tableprefix']}';
+\$config['database']['type'] = '".addcslashes($mybb->input['dbengine'], "'")."';
+\$config['database']['database'] = '".addcslashes($config['dbname'], "'")."';
+\$config['database']['table_prefix'] = '".addcslashes($config['tableprefix'], "'")."';
 
-\$config['database']['hostname'] = '{$config['dbhost']}';
-\$config['database']['username'] = '{$config['dbuser']}';
-\$config['database']['password'] = '{$config['dbpass']}';
+\$config['database']['hostname'] = '".addcslashes($config['dbhost'], "'")."';
+\$config['database']['username'] = '".addcslashes($config['dbuser'], "'")."';
+\$config['database']['password'] = '".addcslashes($config['dbpass'], "'")."';
 
 /**
  * Admin CP directory
@@ -1530,8 +1556,8 @@ function create_tables()
  *  of the most commonly accessed data in MyBB.
  *  By default, the database is used to store this data.
  *
- *  If you wish to use the file system (cache/ directory), MemCache (or MemCached), xcache, APC, or eAccelerator
- *  you can change the value below to 'files', 'memcache', 'memcached', 'xcache', 'apc' or 'eaccelerator' from 'db'.
+ *  If you wish to use the file system (cache/ directory), MemCache (or MemCached), xcache, APC, APCu, eAccelerator or Redis
+ *  you can change the value below to 'files', 'memcache', 'memcached', 'xcache', 'apc', 'apcu', 'eaccelerator' or 'redis' from 'db'.
  */
 
 \$config['cache_store'] = 'db';
@@ -1547,6 +1573,19 @@ function create_tables()
 
 \$config['memcache']['host'] = 'localhost';
 \$config['memcache']['port'] = 11211;
+
+/**
+ * Redis configuration
+ *  If you are using Redis as your data-cache
+ *  you need to configure the hostname and port
+ *  of your redis server below. If you want
+ *  to connect via unix sockets, use the full
+ *  path to the unix socket as host and leave
+ *  the port setting unconfigured or false.
+ */
+
+\$config['redis']['host'] = 'localhost';
+\$config['redis']['port'] = 6379;
 
 /**
  * Super Administrators
@@ -1649,13 +1688,13 @@ function create_tables()
 		$val = preg_replace('#mybb_(\S+?)([\s\.,\(]|$)#', $config['tableprefix'].'\\1\\2', $val);
 		$val = preg_replace('#;$#', $db->build_create_table_collation().";", $val);
 		preg_match('#CREATE TABLE (\S+)(\s?|\(?)\(#i', $val, $match);
-		if($match[1])
+		if(!empty($match[1]))
 		{
 			$db->drop_table($match[1], false, false);
 			echo $lang->sprintf($lang->tablecreate_step_created, $match[1]);
 		}
 		$db->query($val);
-		if($match[1])
+		if(!empty($match[1]))
 		{
 			echo $lang->done . "<br />\n";
 		}
@@ -1669,7 +1708,7 @@ function create_tables()
  */
 function populate_tables()
 {
-	global $output, $lang;
+	global $output, $lang, $dboptions;
 
 	require MYBB_ROOT.'inc/config.php';
 	$db = db_connection($config);
@@ -1769,8 +1808,7 @@ function insert_templates()
 	// 1.8: Stylesheet Colors
 	$contents = @file_get_contents(INSTALL_ROOT.'resources/mybb_theme_colors.xml');
 
-	require_once MYBB_ROOT."inc/class_xml.php";
-	$parser = new XMLParser($contents);
+	$parser = create_xml_parser($contents);
 	$tree = $parser->get_tree();
 
 	if(is_array($tree) && is_array($tree['colors']))
@@ -1948,6 +1986,10 @@ EOF;
 		{
 			$contactemail = $_SERVER['SERVER_ADMIN'];
 		}
+		else
+		{
+			$contactemail = null;
+		}
 	}
 
 	echo $lang->sprintf($lang->config_step_table, $bbname, $bburl, $websitename, $websiteurl, $cookiedomain, $cookiepath, $contactemail);
@@ -2016,7 +2058,7 @@ EOF;
 		$adminuser = $adminemail = '';
 
 		$settings = file_get_contents(INSTALL_ROOT.'resources/settings.xml');
-		$parser = new XMLParser($settings);
+		$parser = create_xml_parser($settings);
 		$parser->collapse_dups = 0;
 		$tree = $parser->get_tree();
 		$groupcount = $settingcount = 0;
@@ -2087,7 +2129,7 @@ EOF;
 
 		include_once MYBB_ROOT."inc/functions_task.php";
 		$tasks = file_get_contents(INSTALL_ROOT.'resources/tasks.xml');
-		$parser = new XMLParser($tasks);
+		$parser = create_xml_parser($tasks);
 		$parser->collapse_dups = 0;
 		$tree = $parser->get_tree();
 		$taskcount = 0;
@@ -2125,7 +2167,7 @@ EOF;
 		echo $lang->sprintf($lang->admin_step_insertedtasks, $taskcount);
 
 		$views = file_get_contents(INSTALL_ROOT.'resources/adminviews.xml');
-		$parser = new XMLParser($views);
+		$parser = create_xml_parser($views);
 		$parser->collapse_dups = 0;
 		$tree = $parser->get_tree();
 		$view_count = 0;
@@ -2229,7 +2271,7 @@ function install_done()
 
 	// Insert all of our user groups from the XML file
 	$usergroup_settings = file_get_contents(INSTALL_ROOT.'resources/usergroups.xml');
-	$parser = new XMLParser($usergroup_settings);
+	$parser = create_xml_parser($usergroup_settings);
 	$parser->collapse_dups = 0;
 	$tree = $parser->get_tree();
 
@@ -2284,8 +2326,6 @@ function install_done()
 		'lastvisit' => $now,
 		'website' => '',
 		'icq' => '',
-		'aim' => '',
-		'yahoo' => '',
 		'skype' =>'',
 		'google' =>'',
 		'birthday' => '',
@@ -2317,7 +2357,7 @@ function install_done()
 		'referrer' => 0,
 		'buddylist' => '',
 		'ignorelist' => '',
-		'pmfolders' => '',
+		'pmfolders' => "0**$%%$1**$%%$2**$%%$3**$%%$4**",
 		'notepad' => '',
 		'showredirect' => 1,
 		'usernotes' => ''
@@ -2327,7 +2367,7 @@ function install_done()
 
 	echo $lang->done_step_adminoptions;
 	$adminoptions = file_get_contents(INSTALL_ROOT.'resources/adminoptions.xml');
-	$parser = new XMLParser($adminoptions);
+	$parser = create_xml_parser($adminoptions);
 	$parser->collapse_dups = 0;
 	$tree = $parser->get_tree();
 	$insertmodule = array();
@@ -2370,7 +2410,7 @@ function install_done()
 	// Automatic Login
 	my_unsetcookie("sid");
 	my_unsetcookie("mybbuser");
-	my_setcookie('mybbuser', $uid.'_'.$loginkey, null, true);
+	my_setcookie('mybbuser', $uid.'_'.$loginkey, null, true, "lax");
 	ob_end_flush();
 
 	// Make fulltext columns if supported
@@ -2404,13 +2444,16 @@ function install_done()
 	$cache->update_posticons();
 	$cache->update_spiders();
 	$cache->update_bannedips();
-	$cache->update_banned();
 	$cache->update_bannedemails();
 	$cache->update_birthdays();
 	$cache->update_groupleaders();
 	$cache->update_threadprefixes();
 	$cache->update_forumsdisplay();
 	$cache->update("plugins", array());
+	$cache->update("mostonline", array(
+		'numusers' => 0,
+		'time' => 0,
+    ));
 	$cache->update("internal_settings", array('encryption_key' => random_str(32)));
 	$cache->update_default_theme();
 	$cache->update_reportreasons(true);
@@ -2442,11 +2485,16 @@ function install_done()
 	if(is_writable('./'))
 	{
 		$lock = @fopen('./lock', 'w');
-		$written = @fwrite($lock, '1');
-		@fclose($lock);
-		if($written)
+
+		if($lock !== false)
 		{
-			echo $lang->done_step_locked;
+			$written = @fwrite($lock, '1');
+			@fclose($lock);
+
+			if($written)
+			{
+				echo $lang->done_step_locked;
+			}
 		}
 	}
 	if(!$written)
@@ -2460,7 +2508,7 @@ function install_done()
 /**
  * @param array $config
  *
- * @return DB_MySQL|DB_MySQLi|DB_PgSQL|DB_SQLite
+ * @return DB_MySQL|DB_MySQLi|DB_PgSQL|DB_SQLite|PostgresPdoDbDriver|MysqlPdoDbDriver
  */
 function db_connection($config)
 {
@@ -2473,8 +2521,14 @@ function db_connection($config)
 		case "pgsql":
 			$db = new DB_PgSQL;
 			break;
+		case "pgsql_pdo":
+			$db = new PostgresPdoDbDriver();
+			break;
 		case "mysqli":
 			$db = new DB_MySQLi;
+			break;
+		case "mysql_pdo":
+			$db = new MysqlPdoDbDriver();
 			break;
 		default:
 			$db = new DB_MySQL;
@@ -2517,7 +2571,8 @@ function write_settings()
 	$query = $db->simple_select('settings', '*', '', array('order_by' => 'title'));
 	while($setting = $db->fetch_array($query))
 	{
-		$setting['value'] = str_replace("\"", "\\\"", $setting['value']);
+		$setting['name'] = addcslashes($setting['name'], "\\'");
+		$setting['value'] = addcslashes($setting['value'], '\\"$');
 		$settings .= "\$settings['{$setting['name']}'] = \"{$setting['value']}\";\n";
 	}
 	if(!empty($settings))

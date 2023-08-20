@@ -106,11 +106,11 @@ function fetch_unread_count($fid)
 
 		if(isset($mybb->cookies['mybb']['threadread']))
 		{
-			$threadsread = my_unserialize($mybb->cookies['mybb']['threadread']);
+			$threadsread = my_unserialize($mybb->cookies['mybb']['threadread'], false);
 		}
 		if(isset($mybb->cookies['mybb']['forumread']))
 		{
-			$forumsread = my_unserialize($mybb->cookies['mybb']['forumread']);
+			$forumsread = my_unserialize($mybb->cookies['mybb']['forumread'], false);
 		}
 
 		if(!empty($threadsread))
@@ -283,7 +283,16 @@ function mark_all_forums_read()
 				$update_count = 15;
 			}
 
-			$mark_query = '';
+			switch($db->type)
+			{
+				case "pgsql":
+				case "sqlite":
+					$mark_query = array();
+					break;
+				default:
+					$mark_query = '';
+			}
+
 			$done = 0;
 			foreach(array_keys($forums) as $fid)
 			{
@@ -325,7 +334,7 @@ function mark_all_forums_read()
 				}
 			}
 
-			if($mark_query != '')
+			if(!empty($mark_query))
 			{
 				switch($db->type)
 				{

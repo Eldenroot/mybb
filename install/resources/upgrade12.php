@@ -177,7 +177,7 @@ function upgrade12_dbchanges()
 			echo "<input type=\"hidden\" name=\"{$key}\" value=\"{$val}\" />";
 		}
 		global $footer_extra;
-		$footer_extra = "<script type=\"text/javascript\">$(document).ready(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
+		$footer_extra = "<script type=\"text/javascript\">$(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
 		$output->print_footer($next_act);
 	}
 	else
@@ -189,7 +189,7 @@ function upgrade12_dbchanges()
 		echo "<p><strong>The integrer conversion process is now complete.</strong></p>";
 		echo "<p>Click next to continue with the upgrade process.</p>";
 		global $footer_extra;
-		$footer_extra = "<script type=\"text/javascript\">$(document).ready(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
+		$footer_extra = "<script type=\"text/javascript\">$(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
 
 		$output->print_footer($next_act);
 	}
@@ -213,7 +213,7 @@ function upgrade12_dbchanges1()
 	$output->print_contents($contents);
 
 	global $footer_extra;
-	$footer_extra = "<script type=\"text/javascript\">$(document).ready(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
+	$footer_extra = "<script type=\"text/javascript\">$(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
 
 	$output->print_footer("12_dbchanges_post1");
 }
@@ -238,7 +238,7 @@ function upgrade12_dbchanges_post1()
 	$output->print_contents($contents);
 
 	global $footer_extra;
-	$footer_extra = "<script type=\"text/javascript\">$(document).ready(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
+	$footer_extra = "<script type=\"text/javascript\">$(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
 
 	$output->print_footer("12_dbchanges_post2");
 }
@@ -274,7 +274,7 @@ function upgrade12_dbchanges_post2()
 	$output->print_contents($contents);
 
 	global $footer_extra;
-	$footer_extra = "<script type=\"text/javascript\">$(document).ready(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
+	$footer_extra = "<script type=\"text/javascript\">$(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
 
 	$output->print_footer("12_dbchanges_user");
 }
@@ -300,7 +300,7 @@ function upgrade12_dbchanges_user()
 	$output->print_contents($contents);
 
 	global $footer_extra;
-	$footer_extra = "<script type=\"text/javascript\">$(document).ready(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
+	$footer_extra = "<script type=\"text/javascript\">$(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
 
 	$output->print_footer("12_dbchanges2");
 }
@@ -557,7 +557,7 @@ function upgrade12_dbchanges2()
 
 	include_once MYBB_ROOT."inc/functions_task.php";
 	$tasks = file_get_contents(INSTALL_ROOT.'resources/tasks.xml');
-	$parser = new XMLParser($tasks);
+	$parser = create_xml_parser($tasks);
 	$parser->collapse_dups = 0;
 	$tree = $parser->get_tree();
 
@@ -762,14 +762,14 @@ function upgrade12_dbchanges2()
 	$db->update_query("settings", array('value' => 'classic'), "name='postlayout' AND value != 'horizontal'");
 
 	$db->update_query("settings", array('optionscode' => $db->escape_string('php
-<select name=\"upsetting[{$setting[\'name\']}]\"><option value=\"standard\">".($lang->setting_searchtype_standard?$lang->setting_searchtype_standard:"Standard")."</option>".($db->supports_fulltext("threads") && $db->supports_fulltext_boolean("posts")?"<option value=\"fulltext\"".($setting[\'value\']=="fulltext"?" selected=\"selected\"":"").">".($lang->setting_searchtype_fulltext?$lang->setting_searchtype_fulltext:"Full Text")."</option>":"")."</select>')), "name='searchtype'", 1);
+<select name=\"upsetting[{$setting[\'name\']}]\"><option value=\"standard\">".(isset($lang->setting_searchtype_standard)?$lang->setting_searchtype_standard:"Standard")."</option>".($db->supports_fulltext("threads") && $db->supports_fulltext_boolean("posts")?"<option value=\"fulltext\"".($setting[\'value\']=="fulltext"?" selected=\"selected\"":"").">".(isset($lang->setting_searchtype_fulltext)?$lang->setting_searchtype_fulltext:"Full Text")."</option>":"")."</select>')), "name='searchtype'", 1);
 
 	$contents = "Done</p>";
 	$contents .= "<p>Click next to continue with the upgrade process.</p>";
 	$output->print_contents($contents);
 
 	global $footer_extra;
-	$footer_extra = "<script type=\"text/javascript\">$(document).ready(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
+	$footer_extra = "<script type=\"text/javascript\">$(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
 
 	$output->print_footer("12_dbchanges3");
 }
@@ -845,7 +845,7 @@ function upgrade12_dbchanges3()
 	$output->print_contents($contents);
 
 	global $footer_extra;
-	$footer_extra = "<script type=\"text/javascript\">$(document).ready(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
+	$footer_extra = "<script type=\"text/javascript\">$(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
 
 	$output->print_footer("12_dbchanges4");
 }
@@ -914,7 +914,7 @@ function upgrade12_dbchanges4()
 	}
 
 	$adminoptions = file_get_contents(INSTALL_ROOT.'resources/adminoptions.xml');
-	$parser = new XMLParser($adminoptions);
+	$parser = create_xml_parser($adminoptions);
 	$parser->collapse_dups = 0;
 	$tree = $parser->get_tree();
 
@@ -1076,7 +1076,7 @@ function upgrade12_dbchanges4()
 	$output->print_contents($contents);
 
 	global $footer_extra;
-	$footer_extra = "<script type=\"text/javascript\">$(document).ready(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
+	$footer_extra = "<script type=\"text/javascript\">$(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
 
 	$output->print_footer("12_dbchanges5");
 }
@@ -1239,7 +1239,7 @@ function upgrade12_dbchanges5()
 	) ENGINE=MyISAM{$collation};");
 
 	$views = file_get_contents(INSTALL_ROOT.'resources/adminviews.xml');
-	$parser = new XMLParser($views);
+	$parser = create_xml_parser($views);
 	$parser->collapse_dups = 0;
 	$tree = $parser->get_tree();
 
@@ -1280,8 +1280,6 @@ function upgrade12_dbchanges5()
 		$view_count++;
 	}
 
-	$avatardimensions = str_replace('x', '|', my_strtolower($mybb->settings['postmaxavatarsize']));
-
 	$db->simple_select("users", "uid", "avatar != '' AND avatardimensions = ''");
 	while($user = $db->fetch_array($query))
 	{
@@ -1293,7 +1291,7 @@ function upgrade12_dbchanges5()
 	$output->print_contents($contents);
 
 	global $footer_extra;
-	$footer_extra = "<script type=\"text/javascript\">$(document).ready(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
+	$footer_extra = "<script type=\"text/javascript\">$(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
 
 	$output->print_footer("12_redoconfig");
 }
@@ -1448,7 +1446,7 @@ function upgrade12_redoconfig()
 	echo "<p>Click next to continue with the upgrade process.</p>";
 
 	global $footer_extra;
-	$footer_extra = "<script type=\"text/javascript\">$(document).ready(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
+	$footer_extra = "<script type=\"text/javascript\">$(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
 
 	$output->print_footer("12_dbchanges6");
 }
@@ -1520,7 +1518,7 @@ function upgrade12_dbchanges6()
 	$output->print_contents($contents);
 
 	global $footer_extra;
-	$footer_extra = "<script type=\"text/javascript\">$(document).ready(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
+	$footer_extra = "<script type=\"text/javascript\">$(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
 
 	$output->print_footer($nextact);
 }
@@ -1604,7 +1602,7 @@ function upgrade12_dbchanges7()
 	$output->print_contents($contents);
 
 	global $footer_extra;
-	$footer_extra = "<script type=\"text/javascript\">$(document).ready(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
+	$footer_extra = "<script type=\"text/javascript\">$(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
 
 	$output->print_footer($nextact);
 }
@@ -1769,7 +1767,7 @@ function upgrade12_dbchanges8()
 	$output->print_contents($contents);
 
 	global $footer_extra;
-	$footer_extra = "<script type=\"text/javascript\">$(document).ready(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
+	$footer_extra = "<script type=\"text/javascript\">$(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
 
 	$output->print_footer($nextact);
 }
@@ -1793,7 +1791,6 @@ function upgrade12_redothemes()
 	if(!$cachewritable)
 	{
 		$not_writable = true;
-		@fclose($cachewritable);
 	}
 	else
 	{
@@ -1824,7 +1821,6 @@ function upgrade12_redothemes()
 	if(!$themewritable)
 	{
 		$not_writable = true;
-		@fclose($themewritable);
 	}
 	else
 	{
@@ -1866,6 +1862,8 @@ function upgrade12_redothemes()
 	{
 		$db->drop_table("themestylesheets");
 	}
+
+	$collation = $db->build_create_table_collation();
 
 	$db->write_query("CREATE TABLE ".TABLE_PREFIX."themestylesheets(
 		sid int unsigned NOT NULL auto_increment,
@@ -1991,7 +1989,7 @@ function upgrade12_redothemes()
 	echo "<p>Click next to continue with the upgrade process.</p>";
 
 	global $footer_extra;
-	//$footer_extra = "<script type=\"text/javascript\">$(document).ready(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
+	//$footer_extra = "<script type=\"text/javascript\">$(function() { var button = $('.submit_button'); if(button) { button.val('Automatically Redirecting...'); button.prop('disabled', true); button.css('color', '#aaa'); button.css('border-color', '#aaa'); document.forms[0].submit(); } });</script>";
 
 	$output->print_footer("12_done");
 }

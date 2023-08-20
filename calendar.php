@@ -11,11 +11,11 @@
 define("IN_MYBB", 1);
 define('THIS_SCRIPT', 'calendar.php');
 
-$templatelist = "calendar_weekdayheader,calendar_weekrow_day,calendar_weekrow,calendar,calendar_addevent,calendar_year,calendar_day,calendar_select,calendar_repeats,calendar_weekview_day_event_time";
-$templatelist .= ",calendar_weekview_day,calendar_weekview_day_event,calendar_mini_weekdayheader,calendar_mini_weekrow_day,calendar_mini_weekrow,calendar_mini,calendar_mini_weekrow_day_link,calendar_move";
-$templatelist .= ",calendar_event_editbutton,calendar_event_modoptions,calendar_dayview_event,calendar_dayview,codebuttons,calendar_weekrow_day_events,calendar_weekview_month,calendar_addeventlink";
-$templatelist .= ",calendar_jump,calendar_jump_option,calendar_editevent,calendar_dayview_birthdays_bday,calendar_dayview_birthdays,calendar_dayview_noevents,calendar_addevent_calendarselect_hidden";
-$templatelist .= ",calendar_weekrow_day_birthdays,calendar_weekview_day_birthdays,calendar_year_sel,calendar_event_userstar,calendar_addevent_calendarselect,calendar_eventbit,calendar_event,calendar_weekview";
+$templatelist = "calendar_weekdayheader,calendar_weekrow_day,calendar_weekrow,calendar,calendar_addevent,calendar_year,calendar_day,calendar_select,calendar_repeats,calendar_weekview_day_event_time,calendar_weekview_nextlink";
+$templatelist .= ",calendar_weekview_day,calendar_weekview_day_event,calendar_mini_weekdayheader,calendar_mini_weekrow_day,calendar_mini_weekrow,calendar_mini,calendar_mini_weekrow_day_link,calendar_weekview_prevlink";
+$templatelist .= ",calendar_event_editbutton,calendar_event_modoptions,calendar_dayview_event,calendar_dayview,codebuttons,calendar_weekrow_day_events,calendar_weekview_month,calendar_addeventlink,calendar_weekview";
+$templatelist .= ",calendar_jump,calendar_jump_option,calendar_editevent,calendar_dayview_birthdays_bday,calendar_dayview_birthdays,calendar_dayview_noevents,calendar_addevent_calendarselect_hidden,calendar_nextlink";
+$templatelist .= ",calendar_weekrow_day_birthdays,calendar_weekview_day_birthdays,calendar_year_sel,calendar_event_userstar,calendar_addevent_calendarselect,calendar_eventbit,calendar_event,calendar_move,calendar_prevlink";
 
 require_once "./global.php";
 require_once MYBB_ROOT."inc/functions_calendar.php";
@@ -937,7 +937,7 @@ if($mybb->input['action'] == "editevent")
 	{
 		$event_errors = '';
 		$mybb->input['calendar'] = $event['cid'];
-		$name = htmlspecialchars_uni($event['name']);
+		$name = $event['name'];
 		$description = htmlspecialchars_uni($event['description']);
 		if($event['private'] == 1)
 		{
@@ -1432,12 +1432,12 @@ if($mybb->input['action'] == "event")
 		"allow_videocode" => $calendar['allowvideocode']
 	);
 
-	if($mybb->user['showimages'] != 1 && $mybb->user['uid'] != 0 || $mybb->settings['guestimages'] != 1 && $mybb->user['uid'] == 0)
+	if($mybb->user['uid'] != 0 && $mybb->user['showimages'] != 1 || $mybb->settings['guestimages'] != 1 && $mybb->user['uid'] == 0)
 	{
 		$event_parser_options['allow_imgcode'] = 0;
 	}
 
-	if($mybb->user['showvideos'] != 1 && $mybb->user['uid'] != 0 || $mybb->settings['guestvideos'] != 1 && $mybb->user['uid'] == 0)
+	if($mybb->user['uid'] != 0 && $mybb->user['showvideos'] != 1 || $mybb->settings['guestvideos'] != 1 && $mybb->user['uid'] == 0)
 	{
 		$event_parser_options['allow_videocode'] = 0;
 	}
@@ -1445,17 +1445,26 @@ if($mybb->input['action'] == "event")
 	$event['description'] = $parser->parse_message($event['description'], $event_parser_options);
 
 	// Get the usergroup
-	if($event['username'])
+	if($event['usergroup'])
 	{
-		if(!$event['displaygroup'])
-		{
-			$event['displaygroup'] = $event['usergroup'];
-		}
-		$user_usergroup = $groupscache[$event['displaygroup']];
+		$user_usergroup = usergroup_permissions($event['usergroup']);
 	}
 	else
 	{
-		$user_usergroup = $groupscache[1];
+		$user_usergroup = usergroup_permissions(1);
+	}
+
+	$displaygroupfields = array("title", "description", "namestyle", "usertitle", "stars", "starimage", "image");
+
+	if(!$event['displaygroup'])
+	{
+		$event['displaygroup'] = $event['usergroup'];
+	}
+
+	$display_group = usergroup_displaygroup($event['displaygroup']);
+	if(is_array($display_group))
+	{
+		$user_usergroup = array_merge($user_usergroup, $display_group);
 	}
 
 	$titles_cache = $cache->read("usertitles");
@@ -1665,7 +1674,7 @@ if($mybb->input['action'] == "dayview")
 	}
 
 	// Incoming year?
-	if(isset($mybb->input['year']) && $mybb->get_input('year', MyBB::INPUT_INT) <= my_date("Y")+5)
+	if(isset($mybb->input['year']) && $mybb->get_input('year', MyBB::INPUT_INT) <= my_date("Y")+5 && $mybb->get_input('year', MyBB::INPUT_INT) >= 1901)
 	{
 		$year = $mybb->get_input('year', MyBB::INPUT_INT);
 	}
@@ -1772,12 +1781,12 @@ if($mybb->input['action'] == "dayview")
 				"allow_videocode" => $calendar['allowvideocode']
 			);
 
-			if($mybb->user['showimages'] != 1 && $mybb->user['uid'] != 0 || $mybb->settings['guestimages'] != 1 && $mybb->user['uid'] == 0)
+			if($mybb->user['uid'] != 0 && $mybb->user['showimages'] != 1 || $mybb->settings['guestimages'] != 1 && $mybb->user['uid'] == 0)
 			{
 				$event_parser_options['allow_imgcode'] = 0;
 			}
 
-			if($mybb->user['showvideos'] != 1 && $mybb->user['uid'] != 0 || $mybb->settings['guestvideos'] != 1 && $mybb->user['uid'] == 0)
+			if($mybb->user['uid'] != 0 && $mybb->user['showvideos'] != 1 || $mybb->settings['guestvideos'] != 1 && $mybb->user['uid'] == 0)
 			{
 				$event_parser_options['allow_videocode'] = 0;
 			}
@@ -1785,17 +1794,26 @@ if($mybb->input['action'] == "dayview")
 			$event['description'] = $parser->parse_message($event['description'], $event_parser_options);
 
 			// Get the usergroup
-			if($event['username'])
+			if($event['usergroup'])
 			{
-				if(!$event['displaygroup'])
-				{
-					$event['displaygroup'] = $event['usergroup'];
-				}
-				$user_usergroup = $groupscache[$event['displaygroup']];
+				$user_usergroup = usergroup_permissions($event['usergroup']);
 			}
 			else
 			{
-				$user_usergroup = $groupscache[1];
+				$user_usergroup = usergroup_permissions(1);
+			}
+
+			$displaygroupfields = array("title", "description", "namestyle", "usertitle", "stars", "starimage", "image");
+
+			if(!$event['displaygroup'])
+			{
+				$event['displaygroup'] = $event['usergroup'];
+			}
+
+			$display_group = usergroup_displaygroup($event['displaygroup']);
+			if(is_array($display_group))
+			{
+				$user_usergroup = array_merge($user_usergroup, $display_group);
 			}
 
 			$titles_cache = $cache->read("usertitles");
@@ -2029,10 +2047,10 @@ if($mybb->input['action'] == "weekview")
 	else
 	{
 		$mybb->input['week'] = (int)str_replace("n", "-", $mybb->get_input('week'));
-		// No negative years please ;)
-		if($mybb->input['week'] < -62167219200)
+		// Nothing before 1901 please ;)
+		if($mybb->input['week'] < -2177625600)
 		{
-			$mybb->input['week'] = -62167219200;
+			$mybb->input['week'] = -2177625600;
 		}
 	}
 
@@ -2077,10 +2095,31 @@ if($mybb->input['action'] == "weekview")
 
 	$today = my_date("dnY");
 
-	$next_week = $mybb->input['week'] + 604800;
-	$next_link = get_calendar_week_link($calendar['cid'], $next_week);
 	$prev_week = $mybb->input['week'] - 604800;
-	$prev_link = get_calendar_week_link($calendar['cid'], $prev_week);
+
+	$prev_week_link = '';
+	if(my_date("Y", $prev_week) >= 1901)
+	{
+		$prev_link = get_calendar_week_link($calendar['cid'], $prev_week);
+
+		eval("\$prev_week_link = \"".$templates->get("calendar_weekview_prevlink")."\";");
+	}
+
+	$next_week = $mybb->input['week'] + 604800;
+
+	$next_week_link = '';
+	if(my_date("Y", $next_week)+1 <= my_date("Y")+5)
+	{
+		$next_link = get_calendar_week_link($calendar['cid'], $next_week);
+
+		eval("\$next_week_link = \"".$templates->get("calendar_weekview_nextlink")."\";");
+	}
+
+	$sep = '';
+	if(!empty($prev_week_link) && !empty($next_week_link))
+	{
+		$sep = " | ";
+	}
 
 	$weekday_date = $mybb->input['week'];
 
@@ -2277,7 +2316,7 @@ if(!$mybb->input['action'])
 	$plugins->run_hooks("calendar_main_view");
 
 	// Incoming year?
-	if(isset($mybb->input['year']) && $mybb->get_input('year', MyBB::INPUT_INT) <= my_date("Y")+5)
+	if(isset($mybb->input['year']) && $mybb->get_input('year', MyBB::INPUT_INT) <= my_date("Y")+5 && $mybb->get_input('year', MyBB::INPUT_INT) >= 1901)
 	{
 		$year = $mybb->get_input('year', MyBB::INPUT_INT);
 	}
@@ -2300,11 +2339,31 @@ if(!$mybb->input['action'])
 	add_breadcrumb(htmlspecialchars_uni($calendar['name']), get_calendar_link($calendar['cid']));
 	add_breadcrumb("$monthnames[$month] $year", get_calendar_link($calendar['cid'], $year, $month));
 
-	$next_month = get_next_month($month, $year);
 	$prev_month = get_prev_month($month, $year);
 
-	$prev_link = get_calendar_link($calendar['cid'], $prev_month['year'], $prev_month['month']);
-	$next_link = get_calendar_link($calendar['cid'], $next_month['year'], $next_month['month']);
+	$prev_month_link = '';
+	if($prev_month['year'] >= 1901)
+	{
+		$prev_link = get_calendar_link($calendar['cid'], $prev_month['year'], $prev_month['month']);
+
+		eval("\$prev_month_link = \"".$templates->get("calendar_prevlink")."\";");
+	}
+
+	$next_month = get_next_month($month, $year);
+
+	$next_month_link = '';
+	if($next_month['year'] <= my_date("Y")+5)
+	{
+		$next_link = get_calendar_link($calendar['cid'], $next_month['year'], $next_month['month']);
+
+		eval("\$next_month_link = \"".$templates->get("calendar_nextlink")."\";");
+	}
+
+	$sep = '';
+	if(!empty($prev_month_link) && !empty($next_month_link))
+	{
+		$sep = " | ";
+	}
 
 	// Start constructing the calendar
 
@@ -2489,19 +2548,18 @@ if(!$mybb->input['action'])
 			// Is the current day
 			if($day.$calendar_month.$year == $today && $month == $calendar_month)
 			{
-				$day_class = "trow_sep";
+				eval("\$day_bits .= \"".$templates->get("calendar_weekrow_currentday")."\";");
 			}
 			// Not in this month
 			else if($in_month == 0)
 			{
-				$day_class = "trow1";
+				eval("\$day_bits .= \"".$templates->get("calendar_weekrow_day")."\";");
 			}
 			// Just a normal day in this month
 			else
 			{
-				$day_class = "trow2";
+				eval("\$day_bits .= \"".$templates->get("calendar_weekrow_thismonth")."\";");
 			}
-			eval("\$day_bits .= \"".$templates->get("calendar_weekrow_day")."\";");
 			$day_birthdays = $day_events = "";
 			++$day;
 		}

@@ -117,10 +117,13 @@ $l['seconds_short'] = "s";
 $l['permanent'] = "Permanent";
 $l['all_forums'] = "All Forums";
 $l['all_groups'] = "All groups";
+$l['all_prefix'] = "All prefixes";
 $l['select_forums'] = "Select forums";
 $l['select_groups'] = "Select groups";
+$l['select_prefix'] = "Select prefixes";
 $l['forums_colon'] = "Forums:";
 $l['groups_colon'] = "Groups:";
+$l['prefix_colon'] = "Prefixes:";
 $l['none'] = "None";
 $l['mybb_acp'] = "MyBB ACP";
 $l['pages'] = "Pages";
@@ -137,6 +140,7 @@ $l['alt_disabled'] = "Disabled";
 $l['enable'] = "Enable";
 $l['disable'] = "Disable";
 $l['saved'] = 'Saved';
+$l['guest'] = 'Guest';
 
 $l['rel_in'] = "In ";
 $l['rel_ago'] = "ago";
@@ -176,7 +180,7 @@ $l['access_denied_desc'] = "You do not have permission to access this part of th
 $l['cannot_perform_action_super_admin_general'] = "Sorry, but you cannot perform this action because you are not a super administrator.<br /><br />To be able to perform this action, you need to add your user ID to the list of super administrators in inc/config.php.";
 
 // AJAX
-$l['loading_text'] = "Loading<br />Please wait...";
+$l['loading_text'] = "Loading<br />Please wait&hellip;";
 
 // Time zone selection boxes
 $l['timezone_gmt_minus_1200'] = "(GMT -12:00) Howland and Baker Islands";
@@ -195,7 +199,7 @@ $l['timezone_gmt_minus_300'] = "(GMT -3:00) Brazil, Buenos Aires, Georgetown, Fa
 $l['timezone_gmt_minus_200'] = "(GMT -2:00) Mid-Atlantic, South Georgia and the South Sandwich Islands";
 $l['timezone_gmt_minus_100'] = "(GMT -1:00) Azores, Cape Verde Islands";
 $l['timezone_gmt'] = "(GMT) Casablanca, Dublin, Edinburgh, London, Lisbon, Monrovia";
-$l['timezone_gmt_100'] = "(GMT +1:00) Berlin, Brussels, Copenhagen, Madrid, Paris, Rome, Warsaw";
+$l['timezone_gmt_100'] = "(GMT +1:00) Berlin, Bratislava, Brussels, Copenhagen, Madrid, Paris, Prague, Rome, Warsaw";
 $l['timezone_gmt_200'] = "(GMT +2:00) Athens, Istanbul, Cairo, Jerusalem, South Africa";
 $l['timezone_gmt_300'] = "(GMT +3:00) Kaliningrad, Minsk, Baghdad, Riyadh, Nairobi";
 $l['timezone_gmt_350'] = "(GMT +3:30) Tehran";
@@ -204,7 +208,7 @@ $l['timezone_gmt_450'] = "(GMT +4:30) Kabul";
 $l['timezone_gmt_500'] = "(GMT +5:00) Islamabad, Karachi, Tashkent";
 $l['timezone_gmt_550'] = "(GMT +5:30) Mumbai, Kolkata, Chennai, New Delhi";
 $l['timezone_gmt_575'] = "(GMT +5:45) Kathmandu";
-$l['timezone_gmt_600'] = "(GMT +6:00) Almaty, Dhakra, Yekaterinburg";
+$l['timezone_gmt_600'] = "(GMT +6:00) Almaty, Dhaka, Yekaterinburg";
 $l['timezone_gmt_650'] = "(GMT +6:30) Yangon";
 $l['timezone_gmt_700'] = "(GMT +7:00) Bangkok, Hanoi, Jakarta";
 $l['timezone_gmt_800'] = "(GMT +8:00) Beijing, Hong Kong, Perth, Singapore, Taipei, Manila";
@@ -297,7 +301,7 @@ $l['editor_insertquote'] = "Insert a Quote";
 $l['editor_invalidyoutube'] = "Invalid YouTube video";
 $l['editor_dailymotion'] = "Dailymotion";
 $l['editor_metacafe'] = "MetaCafe";
-$l['editor_veoh'] = "Veoh";
+$l['editor_mixer'] = "Mixer";
 $l['editor_vimeo'] = "Vimeo";
 $l['editor_youtube'] = "Youtube";
 $l['editor_facebook'] = "Facebook";
@@ -324,6 +328,7 @@ $l['task_massmail_ran_errors'] = "One or more problems occurred sending to \"{1}
 $l['task_versioncheck_ran'] = "The version check task successfully ran.";
 $l['task_versioncheck_ran_errors'] = "Could not connect to MyBB for a version check.";
 $l['task_recachestylesheets_ran'] = 'Re-cached {1} stylesheets.';
+$l['task_sendmailqueue_ran'] = 'The send mail queue task sent up to {1} messages.';
 
 $l['massmail_username'] = "Username";
 $l['email_addr'] = "Email Address";

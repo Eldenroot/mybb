@@ -15,12 +15,29 @@ var MyBB = {
 
 		/* Create the Check All feature */
 		$('[name="allbox"]').each(function(key, value) {
-			$(this).change(function() {
-				var checkboxes = $(this).closest('form').find(':checkbox');
-				if($(this).is(':checked')) {
-					checkboxes.prop('checked', true);
-				} else {
-					checkboxes.removeAttr('checked');
+			var allbox = this;
+			var checked = $(this).is(':checked');
+			var checkboxes = $(this).closest('form').find(':checkbox').not('[name="allbox"]');
+
+			checkboxes.on('change', function() {
+				if(checked && !$(this).prop('checked'))
+				{
+					checked = false;
+					$(allbox).trigger('change', ['item']);
+				}
+			});
+
+			$(this).on('change', function(event, origin) {
+				checked = $(this).is(':checked');
+
+				if(typeof(origin) == "undefined")
+				{
+					checkboxes.each(function() {
+						if(checked != $(this).is(':checked'))
+						{
+							$(this).prop('checked', checked).trigger('change');
+						}
+					});
 				}
 			});
 		});
@@ -29,7 +46,7 @@ var MyBB = {
 		var initialfocus = $(".initial_focus");
 		if(initialfocus.length)
 		{
-			initialfocus.focus();
+			initialfocus.trigger('focus');
 		}
 
 		if(typeof(use_xmlhttprequest) != "undefined" && use_xmlhttprequest == 1)
@@ -38,9 +55,9 @@ var MyBB = {
 			mark_read_imgs.each(function()
 			{
 				var element = $(this);
-				if(element.hasClass('forum_off') || element.hasClass('forum_offlock') || element.hasClass('forum_offlink') || element.hasClass('subforum_minioff') || element.hasClass('subforum_miniofflock') || element.hasClass('subforum_miniofflink') || (element.attr("title") && element.attr("title") == lang.no_new_posts)) return;
+				if(element.hasClass('forum_off') || element.hasClass('forum_offclose') || element.hasClass('forum_offlink') || element.hasClass('subforum_minioff') || element.hasClass('subforum_minioffclose') || element.hasClass('subforum_miniofflink') || (element.attr("title") && element.attr("title") == lang.no_new_posts)) return;
 
-				element.click(function()
+				element.on('click', function()
 				{
 					MyBB.markForumRead(this);
 				});
@@ -60,12 +77,21 @@ var MyBB = {
 				$("body").css("overflow", "hidden");
 				if(initialfocus.length > 0)
 				{
-					initialfocus.focus();
+					initialfocus.trigger('focus');
 				}
 			});
 
 			$(document).on($.modal.CLOSE, function(event, modal) {
 				$("body").css("overflow", "auto");
+			});
+		}
+
+		$("a.referralLink").on('click', MyBB.showReferrals);
+
+		if($('.author_avatar').length)
+		{
+			$(".author_avatar img").on('error', function () {
+				$(this).unbind("error").closest('.author_avatar').remove();
 			});
 		}
 	},
@@ -82,9 +108,52 @@ var MyBB = {
 		});
 	},
 
+	prompt: function(message, options)
+	{
+		var defaults = { fadeDuration: 250, zIndex: (typeof modal_zindex !== 'undefined' ? modal_zindex : 9999) };
+		var buttonsText = '', title = '';
+
+		for (var i in options.buttons)
+		{
+			buttonsText += templates.modal_button.replace('__title__', options.buttons[i].title);
+		}
+
+		// Support passing custom title
+		if ($.isArray(message)) {
+			title = message[0];
+			message = message[1];
+		} else {
+			title = lang.confirm_title;
+		}
+
+		var html = templates.modal.replace('__buttons__', buttonsText).replace('__message__', message).replace('__title__', title);
+		var modal = $(html);
+		modal.modal($.extend(defaults, options));
+		var buttons = modal.find('.modal_buttons > .button');
+		buttons.on('click', function(e)
+		{
+			e.preventDefault();
+			var index = $(this).index();
+			if (options.submit(e, options.buttons[index].value) == false)
+				return;
+
+			$.modal.close();
+		});
+
+		if (buttons[0])
+		{
+			modal.on($.modal.OPEN, function()
+			{
+				$(buttons[0]).trigger('focus');
+			});
+		}
+
+		return modal;
+	},
+
 	deleteEvent: function(eid)
 	{
-		$.prompt(deleteevent_confirm, {
+		MyBB.prompt(deleteevent_confirm, {
 			buttons:[
 					{title: yes_confirm, value: true},
 					{title: no_confirm, value: false}
@@ -139,7 +208,7 @@ var MyBB = {
 					);
 
 					$("body").append(form);
-					form.submit();
+					form.trigger('submit');
 				}
 			}
 		});
@@ -160,9 +229,19 @@ var MyBB = {
 		MyBB.popupWindow("/member.php?action=viewnotes&uid="+uid+"&modal=1");
 	},
 
+	getIP: function(pid)
+	{
+		MyBB.popupWindow("/moderation.php?action=getip&pid="+pid+"&modal=1");
+	},
+
+	getPMIP: function(pmid)
+	{
+		MyBB.popupWindow("/moderation.php?action=getpmip&pmid="+pmid+"&modal=1");
+	},
+
 	deleteReputation: function(uid, rid)
 	{
-		$.prompt(delete_reputation_confirm, {
+		MyBB.prompt(delete_reputation_confirm, {
 			buttons:[
 					{title: yes_confirm, value: true},
 					{title: no_confirm, value: false}
@@ -208,7 +287,7 @@ var MyBB = {
 					);
 
 					$("body").append(form);
-					form.submit();
+					form.trigger('submit');
 				}
 			}
 		});
@@ -321,7 +400,7 @@ var MyBB = {
 		{
 			return false;
 		}
-		form.submit();
+		form.trigger('submit');
 	},
 
 	changeTheme: function()
@@ -331,7 +410,7 @@ var MyBB = {
 		{
 			return false;
 		}
-		form.submit();
+		form.trigger('submit');
 	},
 
 	detectDSTChange: function(timezone_with_dst)
@@ -366,7 +445,7 @@ var MyBB = {
 						);
 
 						$("body").append(form);
-						form.submit();
+						form.trigger('submit');
 	                }
 	            }
 			});
@@ -428,7 +507,7 @@ var MyBB = {
 
 	deleteAnnouncement: function(data)
 	{
-		$.prompt(announcement_quickdelete_confirm, {
+		MyBB.prompt(announcement_quickdelete_confirm, {
 			buttons:[
 					{title: yes_confirm, value: true},
 					{title: no_confirm, value: false}
@@ -442,6 +521,28 @@ var MyBB = {
 		});
 
 		return false;
+	},
+
+	showReferrals: function(e)
+	{
+		var idPieces, uid;
+
+		e.preventDefault();
+		
+		if(typeof this.id == "undefined")
+		{
+			return false;
+		}
+
+		idPieces = this.id.split("_");
+		uid = parseInt(idPieces[idPieces.length - 1], 10);
+
+		if(uid <= 0)
+		{
+			return false;
+		}
+
+		MyBB.popupWindow("/xmlhttp.php?action=get_referrals&uid="+uid);
 	},
 
 	// Fixes https://github.com/mybb/mybb/issues/1232
@@ -510,7 +611,7 @@ var Cookie = {
 	get: function(name)
 	{
 		name = cookiePrefix + name;
-		return $.cookie(name);
+		return Cookies.get(name);
 	},
 
 	set: function(name, value, expires)
@@ -531,7 +632,7 @@ var Cookie = {
 			secure: cookieSecureFlag == true,
 		};
 
-		return $.cookie(name, value, options);
+		return Cookies.set(name, value, options);
 	},
 
 	unset: function(name)
@@ -542,12 +643,11 @@ var Cookie = {
 			path: cookiePath,
 			domain: cookieDomain
 		};
-		return $.removeCookie(name, options);
+		return Cookies.remove(name, options);
 	}
 };
 
 var expandables = {
-
 	init: function()
 	{
 		var expanders = $(".expcolimage .expander");
@@ -556,81 +656,41 @@ var expandables = {
 			expanders.each(function()
 			{
         		var expander = $(this);
-				if(expander.attr("id") == false)
+				if(!expander || expander.attr("id") == false)
 				{
 					return;
 				}
 
-				expander.click(function()
+				expander.on('click', function()
 				{
-					controls = expander.attr("id").replace("_img", "");
-					expandables.expandCollapse(this, controls);
+					expandables.expandCollapse($(this));
 				});
 
-				if(MyBB.browser == "ie")
-				{
-					expander.css("cursor", "hand");
-				}
-				else
-				{
-					expander.css("cursor", "pointer");
-				}
+				expander.css("cursor", MyBB.browser == "ie" ? "hand" : "pointer");
 			});
 		}
 	},
 
-	expandCollapse: function(e, controls)
+	expandCollapse: function(element)
 	{
-		element = $(e);
+		var controls = element.attr("id").replace("_img", ""),
+			expandedItem = $("#"+controls+"_e");
 
-		if(!element || controls == false)
+		if(expandedItem.length)
 		{
-			return false;
-		}
-		var expandedItem = $("#"+controls+"_e");
-		var collapsedItem = $("#"+controls+"_c");
+			var expState = + !expandedItem.is(":hidden"),
+				expcolImg = element.attr("src"),			
+				expText = [lang.expcol_collapse, lang.expcol_expand];
 
-		if(expandedItem.length && collapsedItem.length)
-		{
-			// Expanding
-			if(expandedItem.is(":hidden"))
-			{
-				expandedItem.toggle("fast");
-				collapsedItem.toggle("fast");
-				this.saveCollapsed(controls);
-			}
-			// Collapsing
-			else
-			{
-				expandedItem.toggle("fast");
-				collapsedItem.toggle("fast");
-				this.saveCollapsed(controls, 1);
-			}
-		}
-		else if(expandedItem.length && !collapsedItem.length)
-		{
-			// Expanding
-			if(expandedItem.is(":hidden"))
-			{
-				expandedItem.toggle("fast");
-				element.attr("src", element.attr("src").replace(/collapse_collapsed\.(gif|jpg|jpeg|bmp|png)$/i, "collapse.$1"))
-									.attr("alt", "[-]")
-									.attr("title", "[-]");
-				element.parent().parent('td').removeClass('tcat_collapse_collapsed');
-				element.parent().parent('.thead').removeClass('thead_collapsed');
-				this.saveCollapsed(controls);
-			}
-			// Collapsing
-			else
-			{
-				expandedItem.toggle("fast");
-				element.attr("src", element.attr("src").replace(/collapse\.(gif|jpg|jpeg|bmp|png)$/i, "collapse_collapsed.$1"))
-									.attr("alt", "[+]")
-									.attr("title", "[+]");
-				element.parent().parent('td').addClass('tcat_collapse_collapsed');
-				element.parent().parent('.thead').addClass('thead_collapsed');
-				this.saveCollapsed(controls, 1);
-			}
+			expandedItem.toggle("fast", this.expCallback(controls, expState));
+			
+			element.attr({
+				"alt": expText[expState],
+				"title": expText[expState],
+				"src": expState ? expcolImg.replace('collapse.', 'collapse_collapsed.') : expcolImg.replace('collapse_collapsed.', 'collapse.')
+			})
+			.parents(':eq(1)').toggleClass(element.parents(':eq(1)').hasClass('thead') ? 'thead_collapsed' : 'tcat_collapse_collapsed');
+			this.saveCollapsed(controls, expState);
 		}
 		return true;
 	},
@@ -659,6 +719,12 @@ var expandables = {
 			newCollapsed[newCollapsed.length] = id;
 		}
 		Cookie.set('collapsed', newCollapsed.join("|"));
+	},
+
+	// Dummy callback function to override by theme developers
+	expCallback: function(id, state)
+	{
+		//console.log("id:"+id+" state:"+state);
 	}
 };
 

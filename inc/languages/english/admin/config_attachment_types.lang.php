@@ -6,7 +6,7 @@
  */
 
 $l['attachment_types'] = "Attachment Types";
-$l['attachment_types_desc'] = "Here you can create and manage attachment types which define which types of files users can attach to posts.";
+$l['attachment_types_desc'] = "Here you can create and manage attachment types which define which types of files users can attach to posts. Note: Disabling an attachment type will make existing attachments of this type inaccessible.";
 $l['add_new_attachment_type'] = "Add New Attachment Type";
 $l['add_attachment_type'] = "Add Attachment Type";
 $l['add_attachment_type_desc'] = "Adding a new attachment type will allow members to attach files of this type to their posts. You have the ability to control the extension, MIME type, maximum size and show a small icon for each attachment type.";
@@ -46,6 +46,8 @@ $l['success_activated_attachment_type'] = 'The selected attachment type has been
 $l['success_deactivated_attachment_type'] = 'The selected attachment type has been deactivated successfully.';
 
 $l['enabled'] = "Enabled?";
+$l['forcedownload'] = "Force Download";
+$l['forcedownload_desc'] = "Enabling this will always force the attachment to be downloaded as a file.";
 $l['avatar_file'] = 'Avatar File';
 $l['avatar_file_desc'] = 'Do you want to allow this attachment type to be used for avatars?';
 

@@ -11,7 +11,7 @@
 define("IN_MYBB", 1);
 define('THIS_SCRIPT', 'contact.php');
 
-$templatelist = "contact,post_captcha,post_captcha_recaptcha,post_captcha_nocaptcha";
+$templatelist = "contact,post_captcha,post_captcha_recaptcha_invisible,post_captcha_nocaptcha,post_captcha_hcaptcha_invisible,post_captcha_hcaptcha";
 
 require_once "./global.php";
 require_once MYBB_ROOT.'inc/class_captcha.php';
@@ -77,7 +77,7 @@ if($mybb->usergroup['emailfloodtime'] > 0)
 	$last_email = $db->fetch_array($query);
 
 	// Users last email was within the flood time, show the error
-	if($last_email['mid'])
+	if(!empty($last_email['mid']))
 	{
 		$remaining_time = ($mybb->usergroup['emailfloodtime']*60)-(TIME_NOW-$last_email['dateline']);
 
@@ -213,7 +213,7 @@ if($mybb->request_method == "post")
 			$mybb->input['message'] = $parser->parse_badwords($mybb->input['message']);
 		}
 
-		$user = $lang->na;
+		$user = $lang->guest;
 		if($mybb->user['uid'])
 		{
 			$user = htmlspecialchars_uni($mybb->user['username']).' - '.$mybb->settings['bburl'].'/'.get_profile_link($mybb->user['uid']);
@@ -223,7 +223,7 @@ if($mybb->request_method == "post")
 		$message = $lang->sprintf($lang->email_contact, $mybb->input['email'], $user, $session->ipaddress, $mybb->input['message']);
 
 		// Email the administrator
-		my_mail($contactemail, $subject, $message, $mybb->input['email']);
+		my_mail($contactemail, $subject, $message, '', '', '', false, 'text', '', $mybb->get_input('email', MyBB::INPUT_STRING));
 
 		$plugins->run_hooks('contact_do_end');
 
@@ -244,14 +244,15 @@ if($mybb->request_method == "post")
 			);
 			$db->insert_query("maillogs", $log_entry);
 		}
-
-		if($mybb->usergroup['emailfloodtime'] > 0 || (isset($sent_count) && $sent_count + 1 >= $mybb->usergroup['maxemails']))
+		
+		$mybb->input['from'] = $mybb->get_input('from');
+		if(!empty($mybb->input['from']))
 		{
-			redirect('index.php', $lang->contact_success_message, '', true);
+			redirect($mybb->input['from'], $lang->contact_success_message, '', true);
 		}
 		else
 		{
-			redirect('contact.php', $lang->contact_success_message, '', true);
+			redirect('index.php', $lang->contact_success_message, '', true);
 		}
 	}
 	else
@@ -278,16 +279,29 @@ if($mybb->settings['captchaimage'] && !$mybb->user['uid'])
 	}
 }
 
-$mybb->input['subject'] = htmlspecialchars_uni($mybb->input['subject']);
-$mybb->input['message'] = htmlspecialchars_uni($mybb->input['message']);
+$contact_subject = htmlspecialchars_uni($mybb->input['subject']);
+$contact_message = htmlspecialchars_uni($mybb->input['message']);
 
 if($mybb->user['uid'] && !$mybb->get_input('email'))
 {
-	$mybb->input['email'] = htmlspecialchars_uni($mybb->user['email']);
+	$user_email = htmlspecialchars_uni($mybb->user['email']);
 }
 else
 {
-	$mybb->input['email'] = htmlspecialchars_uni($mybb->get_input('email'));
+	$user_email = htmlspecialchars_uni($mybb->get_input('email'));
+}
+
+if(isset($mybb->input['from']))
+{
+	$redirect_url = htmlspecialchars_uni($mybb->get_input('from'));
+}
+else if(isset($_SERVER['HTTP_REFERER']) && strpos($_SERVER['HTTP_REFERER'], $mybb->settings['bburl']) !== false  && strpos($_SERVER['HTTP_REFERER'], "contact.php") === false)
+{
+	$redirect_url = htmlentities($_SERVER['HTTP_REFERER']);
+}
+else
+{
+	$redirect_url = '';
 }
 
 $plugins->run_hooks('contact_end');

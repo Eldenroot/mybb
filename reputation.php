@@ -44,6 +44,20 @@ if(!$user)
 }
 $user_permissions = user_permissions($uid);
 
+// Fetch display group properties.
+$displaygroupfields = array("title", "description", "namestyle", "usertitle", "stars", "starimage", "image");
+
+if(!$user['displaygroup'])
+{
+	$user['displaygroup'] = $user['usergroup'];
+}
+
+$display_group = usergroup_displaygroup($user['displaygroup']);
+if(is_array($display_group))
+{
+	$user_permissions = array_merge($user_permissions, $display_group);
+}
+
 $mybb->input['action'] = $mybb->get_input('action');
 
 // Here we perform our validation when adding a reputation to see if the user
@@ -159,7 +173,16 @@ if($mybb->input['action'] == "add" || $mybb->input['action'] == "do_add")
 	{
 		$query = $db->simple_select("reputation", "*", "adduid='".$mybb->user['uid']."' AND uid='{$uid}' AND pid = '".$mybb->get_input('pid', MyBB::INPUT_INT)."'");
 		$existing_reputation = $db->fetch_array($query);
-		$rid = $existing_reputation['rid'];
+
+		if($existing_reputation)
+		{
+			$rid = $existing_reputation['rid'];
+		}
+		else
+		{
+			$rid = 0;
+		}
+
 		$was_post = true;
 	}
 
@@ -195,7 +218,7 @@ if($mybb->input['action'] == "add" || $mybb->input['action'] == "do_add")
 		}
 
 		// We have the correct post, but has the user given too much reputation to another in the same thread?
-		if(!$message && $was_post && $mybb->usergroup['maxreputationsperthread'] != 0)
+		if(!$message && !empty($was_post) && $mybb->usergroup['maxreputationsperthread'] != 0)
 		{
 			$timesearch = TIME_NOW - (60 * 60 * 24);
 			$query = $db->query("
@@ -271,7 +294,7 @@ if($mybb->input['action'] == "do_add" && $mybb->request_method == "post")
 	$mybb->input['comments'] = trim($mybb->get_input('comments')); // Trim whitespace to check for length
 	if(my_strlen($mybb->input['comments']) < $mybb->settings['minreplength'] && $mybb->get_input('pid', MyBB::INPUT_INT) == 0)
 	{
-		$message = $lang->add_no_comment;
+		$message = $lang->sprintf($lang->add_no_comment, $mybb->settings['minreplength']);
 		if($mybb->input['nomodal'])
 		{
 			eval("\$error = \"".$templates->get("reputation_add_error_nomodal", 1, 0)."\";");
@@ -413,6 +436,7 @@ if($mybb->input['action'] == "do_add" && $mybb->request_method == "post")
 if($mybb->input['action'] == "add")
 {
 	$plugins->run_hooks("reputation_add_start");
+	$delete_button = '';
 
 	// If we have an existing reputation for this user, the user can modify or delete it.
 	$user['username'] = htmlspecialchars_uni($user['username']);
@@ -424,6 +448,7 @@ if($mybb->input['action'] == "add")
 
 		if($mybb->usergroup['issupermod'] == 1 || ($mybb->usergroup['candeletereputations'] == 1 && $existing_reputation['adduid'] == $mybb->user['uid'] && $mybb->user['uid'] != 0))
 		{
+			$reputation_pid = $mybb->get_input('pid', MyBB::INPUT_INT);
 			eval("\$delete_button = \"".$templates->get("reputation_add_delete")."\";");
 		}
 	}
@@ -487,7 +512,7 @@ if($mybb->input['action'] == "add")
 			}
 		}
 
-		$mybb->input['pid'] = $mybb->get_input('pid', MyBB::INPUT_INT);
+		$reputation_pid = $mybb->get_input('pid', MyBB::INPUT_INT);
 
 		$plugins->run_hooks("reputation_add_end");
 		eval("\$reputation_add = \"".$templates->get("reputation_add", 1, 0)."\";");
@@ -517,12 +542,16 @@ if($mybb->input['action'] == "delete")
 	// Verify incoming POST request
 	verify_post_check($mybb->get_input('my_post_key'));
 
+	$rid = $mybb->get_input('rid', MyBB::INPUT_INT);
+	
+	$plugins->run_hooks("reputation_delete_start");
+
 	// Fetch the existing reputation for this user given by our current user if there is one.
 	$query = $db->query("
 		SELECT r.*, u.username
 		FROM ".TABLE_PREFIX."reputation r
 		LEFT JOIN ".TABLE_PREFIX."users u ON (u.uid=r.adduid)
-		WHERE rid = '".$mybb->get_input('rid', MyBB::INPUT_INT)."'
+		WHERE r.rid = '{$rid}' AND r.uid = '{$uid}'
 	");
 	$existing_reputation = $db->fetch_array($query);
 
@@ -531,9 +560,11 @@ if($mybb->input['action'] == "delete")
 	{
 		error_no_permission();
 	}
+	
+	$plugins->run_hooks("reputation_delete_end");
 
 	// Delete the specified reputation
-	$db->delete_query("reputation", "uid='{$uid}' AND rid='".$mybb->get_input('rid', MyBB::INPUT_INT)."'");
+	$db->delete_query("reputation", "uid='{$uid}' AND rid='{$rid}'");
 
 	// Recount the reputation of this user - keep it in sync.
 	$query = $db->simple_select("reputation", "SUM(reputation) AS reputation_count", "uid='{$uid}'");
@@ -556,17 +587,7 @@ if(!$mybb->input['action'])
 		error_no_permission();
 	}
 
-	// Set display group to their user group if they don't have a display group.
-	if(!$user['displaygroup'])
-	{
-		$user['displaygroup'] = $user['usergroup'];
-	}
-
-	// Fetch display group properties.
-	$displaygroupfields = array('title', 'description', 'namestyle', 'usertitle', 'stars', 'starimage', 'image', 'usereputationsystem');
-	$display_group = usergroup_displaygroup($user['displaygroup']);
-
-	if($user_permissions['usereputationsystem'] != 1 || $display_group['title'] && $display_group['usereputationsystem'] == 0)
+	if($user_permissions['usereputationsystem'] != 1)
 	{
 		// Group has reputation disabled or user has a display group that has reputation disabled
 		error($lang->reputations_disabled_group);
@@ -578,12 +599,6 @@ if(!$mybb->input['action'])
 
 	// Format the user name using the group username style
 	$username = format_name($user['username'], $user['usergroup'], $user['displaygroup']);
-
-	// Set display group to their user group if they don't have a display group.
-	if(!$user['displaygroup'])
-	{
-		$user['displaygroup'] = $user['usergroup'];
-	}
 
 	$usertitle = '';
 
@@ -655,7 +670,7 @@ if(!$mybb->input['action'])
 	}
 
 	// Check the sorting options for the reputation list
-	$sort_selected = array('username' => '', 'last_ipdated' => '');
+	$sort_selected = array('username' => '', 'last_updated' => '');
 	switch($mybb->get_input('sort'))
 	{
 		case "username":
@@ -866,7 +881,7 @@ if(!$mybb->input['action'])
 	");
 
 	// Gather a list of items that have post reputation
-	$reputation_cache = $post_cache = $post_reputation = array();
+	$reputation_cache = $post_cache = $post_reputation = $not_reportable = array();
 
 	while($reputation_vote = $db->fetch_array($query))
 	{
@@ -944,6 +959,21 @@ if(!$mybb->input['action'])
 	}
 
 	$reputation_votes = '';
+	if(!empty($reputation_cache) && $mybb->user['uid'] != 0)
+	{
+		$reputation_ids = implode(',', array_column($reputation_cache, 'rid'));
+		$query = $db->query("
+			SELECT id, reporters FROM ".TABLE_PREFIX."reportedcontent WHERE reportstatus != '1' AND id IN (".$reputation_ids.") AND type = 'reputation'
+		");
+		while($report = $db->fetch_array($query))
+		{
+			$reporters = my_unserialize($report['reporters']);
+			if(is_array($reporters) && in_array($mybb->user['uid'], $reporters))
+			{
+				$not_reportable[] =  $report['id'];
+			}
+		}
+	}
 
 	foreach($reputation_cache as $reputation_vote)
 	{
@@ -1026,7 +1056,7 @@ if(!$mybb->input['action'])
 		}
 
 		$report_link = '';
-		if($mybb->user['uid'] != 0)
+		if($mybb->user['uid'] != 0 && !in_array($reputation_vote['rid'], $not_reportable))
 		{
 			eval("\$report_link = \"".$templates->get("reputation_vote_report")."\";");
 		}

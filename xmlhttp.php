@@ -222,6 +222,7 @@ if($mybb->settings['boardclosed'] == 1 && $mybb->usergroup['canviewboardclosed']
 if($mybb->input['action'] == "get_users")
 {
 	$mybb->input['query'] = ltrim($mybb->get_input('query'));
+	$search_type = $mybb->get_input('search_type', MyBB::INPUT_INT); // 0: starts with, 1: ends with, 2: contains
 
 	// If the string is less than 2 characters, quit.
 	if(my_strlen($mybb->input['query']) < 2)
@@ -251,18 +252,32 @@ if($mybb->input['action'] == "get_users")
 
 	$plugins->run_hooks("xmlhttp_get_users_start");
 
-	$query = $db->simple_select("users", "uid, username", "username LIKE '".$db->escape_string_like($mybb->input['query'])."%'", $query_options);
+	$likestring = $db->escape_string_like($mybb->input['query']);
+	if($search_type == 1)
+	{
+		$likestring = '%'.$likestring;
+	}
+	elseif($search_type == 2)
+	{
+		$likestring = '%'.$likestring.'%';
+	}
+	else
+	{
+		$likestring .= '%';
+	}
+
+	$query = $db->simple_select("users", "uid, username", "username LIKE '{$likestring}'", $query_options);
 	if($limit == 1)
 	{
 		$user = $db->fetch_array($query);
-		$data = array('id' => $user['username'], 'text' => $user['username']);
+		$data = array('uid' => $user['uid'], 'id' => $user['username'], 'text' => $user['username']);
 	}
 	else
 	{
 		$data = array();
 		while($user = $db->fetch_array($query))
 		{
-			$data[] = array('id' => $user['username'], 'text' => $user['username']);
+			$data[] = array('uid' => $user['uid'], 'id' => $user['username'], 'text' => $user['username']);
 		}
 	}
 
@@ -292,8 +307,7 @@ else if($mybb->input['action'] == "edit_subject" && $mybb->request_method == "po
 
 		// Fetch some of the information from the first post of this thread.
 		$query_options = array(
-			"order_by" => "dateline",
-			"order_dir" => "asc",
+			"order_by" => "dateline, pid",
 		);
 		$query = $db->simple_select("posts", "pid,uid,dateline", "tid='".$thread['tid']."'", $query_options);
 		$post = $db->fetch_array($query);
@@ -371,6 +385,7 @@ else if($mybb->input['action'] == "edit_subject" && $mybb->request_method == "po
 		$updatepost = array(
 			"pid" => $post['pid'],
 			"tid" => $thread['tid'],
+			"fid" => $forum['fid'],
 			"prefix" => $thread['prefix'],
 			"subject" => $subject,
 			"edit_uid" => $mybb->user['uid']
@@ -421,7 +436,7 @@ else if($mybb->input['action'] == "edit_post")
 	$post = get_post($mybb->get_input('pid', MyBB::INPUT_INT));
 
 	// No result, die.
-	if(!$post)
+	if(!$post || $post['visible'] == -1)
 	{
 		xmlhttp_error($lang->post_doesnt_exist);
 	}
@@ -468,8 +483,8 @@ else if($mybb->input['action'] == "edit_post")
 			$lang->edit_time_limit = $lang->sprintf($lang->edit_time_limit, $mybb->usergroup['edittimelimit']);
 			xmlhttp_error($lang->edit_time_limit);
 		}
-		// User can't edit unapproved post
-		if($post['visible'] == 0)
+		// User can't edit unapproved post unless permitted for own
+		if($post['visible'] == 0 && !($mybb->settings['showownunapproved'] && $post['uid'] == $mybb->user['uid']))
 		{
 			xmlhttp_error($lang->post_moderation);
 		}
@@ -583,12 +598,12 @@ else if($mybb->input['action'] == "edit_post")
 			$parser_options['allow_smilies'] = 0;
 		}
 
-		if($mybb->user['showimages'] != 1 && $mybb->user['uid'] != 0 || $mybb->settings['guestimages'] != 1 && $mybb->user['uid'] == 0)
+		if($mybb->user['uid'] != 0 && $mybb->user['showimages'] != 1 || $mybb->settings['guestimages'] != 1 && $mybb->user['uid'] == 0)
 		{
 			$parser_options['allow_imgcode'] = 0;
 		}
 
-		if($mybb->user['showvideos'] != 1 && $mybb->user['uid'] != 0 || $mybb->settings['guestvideos'] != 1 && $mybb->user['uid'] == 0)
+		if($mybb->user['uid'] != 0 && $mybb->user['showvideos'] != 1 || $mybb->settings['guestvideos'] != 1 && $mybb->user['uid'] == 0)
 		{
 			$parser_options['allow_videocode'] = 0;
 		}
@@ -720,7 +735,7 @@ else if($mybb->input['action'] == "get_multiquoted")
 		LEFT JOIN ".TABLE_PREFIX."threads t ON (t.tid=p.tid)
 		LEFT JOIN ".TABLE_PREFIX."users u ON (u.uid=p.uid)
 		WHERE {$from_tid}p.pid IN ({$quoted_posts}) {$unviewable_forums} {$inactiveforums}
-		ORDER BY p.dateline
+		ORDER BY p.dateline, p.pid
 	");
 	while($quoted_post = $db->fetch_array($query))
 	{
@@ -730,7 +745,11 @@ else if($mybb->input['action'] == "get_multiquoted")
 			(in_array($quoted_post['fid'], $onlyusfids) && (!$mybb->user['uid'] || $quoted_post['thread_uid'] != $mybb->user['uid']))
 		)
 		{
-			continue;
+			// Allow quoting from own unapproved post
+			if($quoted_post['visible'] == 0 && !($mybb->settings['showownunapproved'] && $quoted_post['uid'] == $mybb->user['uid']))
+			{
+				continue;
+			}
 		}
 
 		$message .= parse_quoted_message($quoted_post, false);
@@ -831,12 +850,27 @@ else if($mybb->input['action'] == "refresh_question" && $mybb->settings['securit
 	");
 
 	$plugins->run_hooks("xmlhttp_refresh_question");
+	
+	require_once MYBB_ROOT."inc/class_parser.php";
+	$parser = new postParser;
+	
+	$parser_options = array(
+		"allow_html" => 0,
+		"allow_mycode" => 1,
+		"allow_smilies" => 1,
+		"allow_imgcode" => 1,
+		"allow_videocode" => 1,
+		"filter_badwords" => 1,
+		"me_username" => 0,
+		"shorten_urls" => 0,
+		"highlight" => 0,
+	);	
 
 	if($db->num_rows($query) > 0)
 	{
 		$question = $db->fetch_array($query);
 
-		echo json_encode(array("question" => htmlspecialchars_uni($question['question']), 'sid' => htmlspecialchars_uni($question['sid'])));
+		echo json_encode(array("question" => $parser->parse_message($question['question'], $parser_options), 'sid' => htmlspecialchars_uni($question['sid'])));
 		exit;
 	}
 	else
@@ -958,7 +992,7 @@ else if($mybb->input['action'] == "username_availability")
 
 	$plugins->run_hooks("xmlhttp_username_availability");
 
-	if($user['uid'])
+	if(!empty($user['uid']))
 	{
 		$lang->username_taken = $lang->sprintf($lang->username_taken, htmlspecialchars_uni($username));
 		echo json_encode($lang->username_taken);
@@ -971,39 +1005,43 @@ else if($mybb->input['action'] == "username_availability")
 		exit;
 	}
 }
-else if($mybb->input['action'] == "username_exists")
+else if($mybb->input['action'] == "email_availability")
 {
 	if(!verify_post_check($mybb->get_input('my_post_key'), true))
 	{
 		xmlhttp_error($lang->invalid_post_code);
 	}
 
-	require_once MYBB_ROOT."inc/functions_user.php";
-	$username = $mybb->get_input('value');
+	require_once MYBB_ROOT."inc/datahandlers/user.php";
+	$userhandler = new UserDataHandler("insert");
+
+	$email = $mybb->get_input('email');
 
 	header("Content-type: application/json; charset={$charset}");
 
-	if(!trim($username))
+	$user = array(
+		'email' => $email
+	);
+
+	$userhandler->set_data($user);
+
+	$errors = array();
+
+	if(!$userhandler->verify_email())
 	{
-		echo json_encode(array("success" => 1));
-		exit;
+		$errors = $userhandler->get_friendly_errors();
 	}
 
-	// Check if the username actually exists
-	$user = get_user_by_username($username);
+	$plugins->run_hooks("xmlhttp_email_availability");
 
-	$plugins->run_hooks("xmlhttp_username_exists");
-
-	if($user['uid'])
+	if(!empty($errors))
 	{
-		$lang->valid_username = $lang->sprintf($lang->valid_username, htmlspecialchars_uni($username));
-		echo json_encode(array("success" => $lang->valid_username));
+		echo json_encode($errors[0]);
 		exit;
 	}
 	else
 	{
-		$lang->invalid_username = $lang->sprintf($lang->invalid_username, htmlspecialchars_uni($username));
-		echo json_encode($lang->invalid_username);
+		echo json_encode("true");
 		exit;
 	}
 }
@@ -1051,6 +1089,42 @@ else if($mybb->input['action'] == "get_buddyselect")
 	{
 		xmlhttp_error($lang->buddylist_error);
 	}
+}
+else if($mybb->input['action'] == 'get_referrals')
+{
+	$lang->load('member');
+	$uid = $mybb->get_input('uid', MYBB::INPUT_INT);
+
+	if (!$uid) {
+		xmlhttp_error($lang->referrals_no_user_specified);
+	}
+
+	$referrals = get_user_referrals($uid);
+
+	if (empty($referrals)) {
+		eval("\$referral_rows = \"".$templates->get('member_no_referrals')."\";");
+	} else {
+		foreach($referrals as $referral)
+		{
+			$bg_color = alt_trow();
+			// Format user name link
+			$username = htmlspecialchars_uni($referral['username']);
+			$username = format_name($username, $referral['usergroup'], $referral['displaygroup']);
+			$username = build_profile_link($username, $referral['uid']);
+
+			$regdate = my_date('normal', $referral['regdate']);
+
+			eval("\$referral_rows .= \"".$templates->get('member_referral_row')."\";");
+		}
+	}
+
+	$plugins->run_hooks('xmlhttp_referrals_end');
+
+	eval("\$referrals = \"".$templates->get('member_referrals_popup', 1, 0)."\";");
+
+	// Send our headers and output.
+	header("Content-type: text/plain; charset={$charset}");
+	echo $referrals;
 }
 
 /**

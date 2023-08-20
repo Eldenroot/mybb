@@ -89,12 +89,6 @@ function validate_password_from_uid($uid, $password, $user = array())
 	{
 		$user = get_user($uid);
 	}
-	if(!$user['salt'])
-	{
-		// Generate a salt for this user and assume the password stored in db is a plain md5 password
-		$password_fields = create_password($user['password'], false, $user);
-		$db->update_query("users", $password_fields, "uid='".$user['uid']."'");
-	}
 
 	if(!$user['loginkey'])
 	{
@@ -250,40 +244,6 @@ function verify_user_password($user, $password)
 }
 
 /**
- * Performs a timing attack safe string comparison.
- *
- * @param string $known_string The first string to be compared.
- * @param string $user_string The second, user-supplied string to be compared.
- * @return bool Result of the comparison.
- */
-function my_hash_equals($known_string, $user_string)
-{
-	if(version_compare(PHP_VERSION, '5.6.0', '>='))
-	{
-		return hash_equals($known_string, $user_string);
-	}
-	else
-	{
-		$known_string_length = my_strlen($known_string);
-		$user_string_length = my_strlen($user_string);
-
-		if($user_string_length != $known_string_length)
-		{
-			return false;
-		}
-
-		$result = 0;
-
-		for($i = 0; $i < $known_string_length; $i++)
-		{
-			$result |= ord($known_string[$i]) ^ ord($user_string[$i]);
-		}
-
-		return $result === 0;
-	}
-}
-
-/**
  * Generates a random salt
  *
  * @return string The salt.
@@ -367,7 +327,7 @@ function add_subscribed_thread($tid, $notification=1, $uid=0)
 
 	$query = $db->simple_select("threadsubscriptions", "*", "tid='".(int)$tid."' AND uid='".(int)$uid."'");
 	$subscription = $db->fetch_array($query);
-	if(!$subscription['tid'])
+	if(empty($subscription) || !$subscription['tid'])
 	{
 		$insert_array = array(
 			'uid' => (int)$uid,
@@ -441,7 +401,7 @@ function add_subscribed_forum($fid, $uid=0)
 
 	$query = $db->simple_select("forumsubscriptions", "*", "fid='".$fid."' AND uid='{$uid}'", array('limit' => 1));
 	$fsubscription = $db->fetch_array($query);
-	if(!$fsubscription['fid'])
+	if(empty($fsubscription) || !$fsubscription['fid'])
 	{
 		$insert_array = array(
 			'fid' => $fid,
@@ -521,8 +481,9 @@ function usercp_menu()
  */
 function usercp_menu_messenger()
 {
-	global $db, $mybb, $templates, $theme, $usercpmenu, $lang, $collapsed, $collapsedimg;
+	global $db, $mybb, $templates, $theme, $usercpmenu, $lang, $collapse, $collapsed, $collapsedimg;
 
+	$expaltext = (in_array("usercppms", $collapse)) ? $lang->expcol_expand : $lang->expcol_collapse;
 	$usercp_nav_messenger = $templates->get("usercp_nav_messenger");
 	// Hide tracking link if no permission
 	$tracking = '';
@@ -583,7 +544,7 @@ function usercp_menu_messenger()
  */
 function usercp_menu_profile()
 {
-	global $db, $mybb, $templates, $theme, $usercpmenu, $lang, $collapsed, $collapsedimg;
+	global $db, $mybb, $templates, $theme, $usercpmenu, $lang, $collapse, $collapsed, $collapsedimg;
 
 	$changenameop = '';
 	if($mybb->usergroup['canchangename'] != 0)
@@ -610,6 +571,7 @@ function usercp_menu_profile()
 		$collapsed['usercpprofile_e'] = '';
 	}
 
+	$expaltext = (in_array("usercpprofile", $collapse)) ? $lang->expcol_expand : $lang->expcol_collapse;
 	eval("\$usercpmenu .= \"".$templates->get("usercp_nav_profile")."\";");
 }
 
@@ -619,9 +581,9 @@ function usercp_menu_profile()
  */
 function usercp_menu_misc()
 {
-	global $db, $mybb, $templates, $theme, $usercpmenu, $lang, $collapsed, $collapsedimg;
+	global $db, $mybb, $templates, $theme, $usercpmenu, $lang, $collapse, $collapsed, $collapsedimg;
 
-	$draftstart = $draftend = '';
+	$draftstart = $draftend = $attachmentop = '';
 	$draftcount = $lang->ucp_nav_drafts;
 
 	$query = $db->simple_select("posts", "COUNT(pid) AS draftcount", "visible = '-2' AND uid = '{$mybb->user['uid']}'");
@@ -648,6 +610,7 @@ function usercp_menu_misc()
 	}
 
 	$profile_link = get_profile_link($mybb->user['uid']);
+	$expaltext = (in_array("usercpmisc", $collapse)) ? $lang->expcol_expand : $lang->expcol_collapse;
 	eval("\$usercpmenu .= \"".$templates->get("usercp_nav_misc")."\";");
 }
 
@@ -756,8 +719,11 @@ function get_pm_folder_name($fid, $name="")
 
 	switch($fid)
 	{
-		case 1:
+		case 0:
 			return $lang->folder_inbox;
+			break;
+		case 1:
+			return $lang->folder_unread;
 			break;
 		case 2:
 			return $lang->folder_sent_items;
@@ -791,7 +757,8 @@ function generate_question($old_qid=0)
 	{
 		$order_by = 'RAND()';
 	}
-	
+
+	$excl_old = '';
 	if($old_qid)
 	{
 		$excl_old = ' AND qid != '.(int)$old_qid;

@@ -101,6 +101,14 @@ class PMDataHandler extends DataHandler
 			$this->set_error("missing_message");
 			return false;
 		}
+
+		// If the length of message is beyond SQL limitation for 'text' field
+		else if(strlen($message) > 65535)
+		{
+			$this->set_error("message_too_long", array('65535', strlen($message)));
+			return false;
+		}
+
 		return true;
 	}
 
@@ -179,7 +187,7 @@ class PMDataHandler extends DataHandler
 				// No recipients? Skip query
 				if(empty($pm[$recipient_type]))
 				{
-					if($recipient_type == 'to' && !$pm['saveasdraft'])
+					if($recipient_type == 'to' && empty($pm['saveasdraft']))
 					{
 						$this->set_error("no_recipients");
 						return false;
@@ -285,6 +293,7 @@ class PMDataHandler extends DataHandler
 		}
 
 		// Now we're done with that we loop through each recipient
+		$pm['recipients'] = array();
 		foreach($recipients as $user)
 		{
 			// Collect group permissions for this recipient.
@@ -301,7 +310,7 @@ class PMDataHandler extends DataHandler
 				}
 
 				// Is the recipient only allowing private messages from their buddy list?
-				if($mybb->settings['allowbuddyonly'] == 1 && $user['receivefrombuddy'] == 1 && !empty($user['buddylist']) && strpos(','.$user['buddylist'].',', ','.$pm['fromid'].',') === false)
+				if(empty($pm['saveasdraft']) && $mybb->settings['allowbuddyonly'] == 1 && $user['receivefrombuddy'] == 1 && !empty($user['buddylist']) && strpos(','.$user['buddylist'].',', ','.$pm['fromid'].',') === false)
 				{
 					$this->set_error('recipient_has_buddy_only', array(htmlspecialchars_uni($user['username'])));
 				}
@@ -535,13 +544,10 @@ class PMDataHandler extends DataHandler
 
 		$uid = 0;
 
-		if(!is_array($pm['recipients']))
+		// Build recipient list
+		$recipient_list = array();
+		if(isset($pm['recipients']) && is_array($pm['recipients']))
 		{
-			$recipient_list = array();
-		}
-		else
-		{
-			// Build recipient list
 			foreach($pm['recipients'] as $recipient)
 			{
 				if(!empty($recipient['bcc']))
@@ -577,7 +583,7 @@ class PMDataHandler extends DataHandler
 		$draftcheck = $db->fetch_array($query);
 
 		// This PM was previously a draft
-		if($draftcheck['pmid'])
+		if(!empty($draftcheck['pmid']))
 		{
 			if($draftcheck['deletetime'])
 			{
@@ -602,7 +608,10 @@ class PMDataHandler extends DataHandler
 			}
 
 			$plugins->run_hooks("datahandler_pm_insert_updatedraft", $this);
-			$db->insert_query("privatemessages", $this->pm_insert_data);
+
+			$this->pmid = $db->insert_query("privatemessages", $this->pm_insert_data);
+
+			$plugins->run_hooks("datahandler_pm_insert_updatedraft_commit", $this);
 
 			// If this is a draft, end it here - below deals with complete messages
 			return array(
@@ -618,7 +627,7 @@ class PMDataHandler extends DataHandler
 			// Send email notification of new PM if it is enabled for the recipient
 			$query = $db->simple_select("privatemessages", "dateline", "uid='".$recipient['uid']."' AND folder='1'", array('order_by' => 'dateline', 'order_dir' => 'desc', 'limit' => 1));
 			$lastpm = $db->fetch_array($query);
-			if($recipient['pmnotify'] == 1 && $recipient['lastactive'] > $lastpm['dateline'])
+			if($recipient['pmnotify'] == 1 && (empty($lastpm['dateline']) || $recipient['lastactive'] > $lastpm['dateline']))
 			{
 				if($recipient['language'] != "" && $lang->language_exists($recipient['language']))
 				{
@@ -654,7 +663,7 @@ class PMDataHandler extends DataHandler
 
 				require_once MYBB_ROOT.'inc/class_parser.php';
 				$parser = new Postparser;
-			
+
 				$parser_options = array(
 					'me_username'		=> $pm['sender']['username'],
 					'filter_badwords'	=> 1
@@ -681,7 +690,10 @@ class PMDataHandler extends DataHandler
 			$this->pm_insert_data['toid'] = $recipient['uid'];
 
 			$plugins->run_hooks("datahandler_pm_insert", $this);
+
 			$this->pmid[] = $db->insert_query("privatemessages", $this->pm_insert_data);
+
+			$plugins->run_hooks("datahandler_pm_insert_commit", $this);
 
 			// If PM noices/alerts are on, show!
 			if($recipient['pmnotice'] == 1)
@@ -721,7 +733,7 @@ class PMDataHandler extends DataHandler
 		// If we're saving a copy
 		if($pm['options']['savecopy'] != 0)
 		{
-			if(isset($recipient_list['to']) && count($recipient_list['to']) == 1)
+			if(isset($recipient_list['to']) && is_array($recipient_list['to']) && count($recipient_list['to']) == 1)
 			{
 				$this->pm_insert_data['toid'] = $uid;
 			}
@@ -735,7 +747,10 @@ class PMDataHandler extends DataHandler
 			$this->pm_insert_data['receipt'] = 0;
 
 			$plugins->run_hooks("datahandler_pm_insert_savedcopy", $this);
+
 			$db->insert_query("privatemessages", $this->pm_insert_data);
+
+			$plugins->run_hooks("datahandler_pm_insert_savedcopy_commit", $this);
 
 			// Because the sender saved a copy, update their total pm count
 			require_once MYBB_ROOT."/inc/functions_user.php";

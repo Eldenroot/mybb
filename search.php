@@ -14,7 +14,7 @@ define('THIS_SCRIPT', 'search.php');
 
 $templatelist = "search,forumdisplay_thread_gotounread,search_results_threads_thread,search_results_threads,search_results_posts,search_results_posts_post,search_results_icon,search_forumlist_forum,search_forumlist";
 $templatelist .= ",multipage,multipage_breadcrumb,multipage_end,multipage_jump_page,multipage_nextpage,multipage_page,multipage_page_current,multipage_page_link_current,multipage_prevpage,multipage_start";
-$templatelist .= ",search_results_posts_inlinecheck,search_results_posts_nocheck,search_results_threads_inlinecheck,search_results_threads_nocheck,search_results_inlinemodcol,search_results_posts_inlinemoderation_custom_tool";
+$templatelist .= ",search_results_posts_inlinecheck,search_results_posts_nocheck,search_results_threads_inlinecheck,search_results_threads_nocheck,search_results_inlinemodcol,search_results_inlinemodcol_empty,search_results_posts_inlinemoderation_custom_tool";
 $templatelist .= ",search_results_posts_inlinemoderation_custom,search_results_posts_inlinemoderation,search_results_threads_inlinemoderation_custom_tool,search_results_threads_inlinemoderation_custom,search_results_threads_inlinemoderation";
 $templatelist .= ",forumdisplay_thread_attachment_count,search_threads_inlinemoderation_selectall,search_posts_inlinemoderation_selectall,post_prefixselect_prefix,post_prefixselect_multiple,search_orderarrow";
 $templatelist .= ",search_results_posts_forumlink,search_results_threads_forumlink,forumdisplay_thread_multipage_more,forumdisplay_thread_multipage_page,forumdisplay_thread_multipage,search_moderator_options";
@@ -60,7 +60,7 @@ if($mybb->input['action'] == "results")
 	$query = $db->simple_select("searchlog", "*", "sid='$sid'");
 	$search = $db->fetch_array($query);
 
-	if(!$search['sid'])
+	if(empty($search['sid']))
 	{
 		error($lang->error_invalidsearch);
 	}
@@ -90,7 +90,7 @@ if($mybb->input['action'] == "results")
 			}
 			break;
 		case "forum":
-			$sortfield = "t.fid";
+			$sortfield = "f.name";
 			break;
 		case "starter":
 			if($search['resulttype'] == "threads")
@@ -104,7 +104,7 @@ if($mybb->input['action'] == "results")
 			break;
 		case "lastpost":
 		default:
-			if($search['resulttype'] == "threads")
+			if(isset($search['resulttype']) && $search['resulttype'] == "threads")
 			{
 				$sortfield = "t.lastpost";
 				$sortby = "lastpost";
@@ -152,7 +152,7 @@ if($mybb->input['action'] == "results")
 
 	// Work out if we have terms to highlight
 	$highlight = "";
-	if($search['keywords'])
+	if(!empty($search['keywords']))
 	{
 		if($mybb->seo_support == true)
 		{
@@ -188,7 +188,14 @@ if($mybb->input['action'] == "results")
 			ORDER BY pid, disporder
 		");
 
-		$forumsread = my_unserialize($mybb->cookies['mybb']['forumread']);
+		if(isset($mybb->cookies['mybb']['forumread']))
+		{
+			$forumsread = my_unserialize($mybb->cookies['mybb']['forumread'], false);
+		}
+		else
+		{
+			$forumsread = array();
+		}
 	}
 	else
 	{
@@ -206,25 +213,32 @@ if($mybb->input['action'] == "results")
 	{
 		if($mybb->user['uid'] == 0)
 		{
-			if($forumsread[$forum['fid']])
+			if(!empty($forumsread[$forum['fid']]))
 			{
 				$forum['lastread'] = $forumsread[$forum['fid']];
 			}
 		}
-		$readforums[$forum['fid']] = $forum['lastread'];
+
+		if(isset($forum['lastread']))
+		{
+			$readforums[$forum['fid']] = $forum['lastread'];
+		}
+		else
+		{
+			$readforums[$forum['fid']] = '';
+		}
 	}
 	$fpermissions = forum_permissions();
 
 	// Inline Mod Column for moderators
-	$inlinemodcol = $inlinecookie = '';
-	$is_mod = $is_supermod = false;
+	$inlinemodcol = $inlinecookie = $inline_edit_js = '';
+	$is_mod = $is_supermod = $show_inline_moderation = false;
 	if($mybb->usergroup['issupermod'])
 	{
 		$is_supermod = true;
 	}
 	if($is_supermod || is_moderator())
 	{
-		eval("\$inlinemodcol = \"".$templates->get("search_results_inlinemodcol")."\";");
 		$inlinecookie = "inlinemod_search".$sid;
 		$inlinecount = 0;
 		$is_mod = true;
@@ -232,57 +246,18 @@ if($mybb->input['action'] == "results")
 	}
 
 	// Show search results as 'threads'
-	if($search['resulttype'] == "threads")
+	if(isset($search['resulttype']) && $search['resulttype'] == "threads")
 	{
 		$threadcount = 0;
 
-		// Moderators can view unapproved threads
-		$query = $db->simple_select("moderators", "fid, canviewunapprove, canviewdeleted", "(id='{$mybb->user['uid']}' AND isgroup='0') OR (id='{$mybb->user['usergroup']}' AND isgroup='1')");
-		if($mybb->usergroup['issupermod'] == 1)
-		{
-			// Super moderators (and admins)
-			$unapproved_where = "t.visible>=-1";
-		}
-		elseif($db->num_rows($query))
-		{
-			// Normal moderators
-			$unapprove_forums = array();
-			$deleted_forums = array();
-			$unapproved_where = '(t.visible = 1';
-			while($moderator = $db->fetch_array($query))
-			{
-				if($moderator['canviewunapprove'] == 1)
-				{
-					$unapprove_forums[] = $moderator['fid'];
-				}
-
-				if($moderator['canviewdeleted'] == 1)
-				{
-					$deleted_forums[] = $moderator['fid'];
-				}
-			}
-
-			if(!empty($unapprove_forums))
-			{
-				$unapproved_where .= " OR (t.visible = 0 AND t.fid IN(".implode(',', $unapprove_forums)."))";
-			}
-			if(!empty($deleted_forums))
-			{
-				$unapproved_where .= " OR (t.visible = -1 AND t.fid IN(".implode(',', $deleted_forums)."))";
-			}
-			$unapproved_where .= ')';
-		}
-		else
-		{
-			// Normal users
-			$unapproved_where = 't.visible>0';
-		}
+		// Moderators can view unapproved threads and deleted threads from forums they moderate
+		$unapproved_where_t = get_visible_where('t');
 
 		// If we have saved WHERE conditions, execute them
 		if($search['querycache'] != "")
 		{
 			$where_conditions = $search['querycache'];
-			$query = $db->simple_select("threads t", "t.tid", $where_conditions. " AND {$unapproved_where} AND t.closed NOT LIKE 'moved|%' ORDER BY t.lastpost DESC {$limitsql}");
+			$query = $db->simple_select("threads t", "t.tid", $where_conditions. " AND ({$unapproved_where_t}) AND t.closed NOT LIKE 'moved|%' ORDER BY t.lastpost DESC {$limitsql}");
 			while($thread = $db->fetch_array($query))
 			{
 				$threads[$thread['tid']] = $thread['tid'];
@@ -304,7 +279,7 @@ if($mybb->input['action'] == "results")
 		else
 		{
 			$where_conditions = "t.tid IN (".$search['threads'].")";
-			$query = $db->simple_select("threads t", "COUNT(t.tid) AS resultcount", $where_conditions. " AND {$unapproved_where} AND t.closed NOT LIKE 'moved|%' {$limitsql}");
+			$query = $db->simple_select("threads t", "COUNT(t.tid) AS resultcount", $where_conditions. " AND ({$unapproved_where_t}) AND t.closed NOT LIKE 'moved|%' {$limitsql}");
 			$count = $db->fetch_array($query);
 
 			if(!$count['resultcount'])
@@ -342,6 +317,13 @@ if($mybb->input['action'] == "results")
 			$permsql .= " AND t.fid NOT IN ($inactiveforums)";
 		}
 
+		$pages = ceil($threadcount / $perpage);
+		if($page > $pages)
+		{
+			$start = 0;
+			$page = 1;
+		}
+
 		// Begin selecting matching threads, cache them.
 		$sqlarray = array(
 			'order_by' => $sortfield,
@@ -353,7 +335,8 @@ if($mybb->input['action'] == "results")
 			SELECT t.*, u.username AS userusername
 			FROM ".TABLE_PREFIX."threads t
 			LEFT JOIN ".TABLE_PREFIX."users u ON (u.uid=t.uid)
-			WHERE $where_conditions AND {$unapproved_where} {$permsql} AND t.closed NOT LIKE 'moved|%'
+			LEFT JOIN ".TABLE_PREFIX."forums f ON (t.fid=f.fid)
+			WHERE $where_conditions AND ({$unapproved_where_t}) {$permsql} AND t.closed NOT LIKE 'moved|%'
 			ORDER BY $sortfield $order
 			LIMIT $start, $perpage
 		");
@@ -379,8 +362,8 @@ if($mybb->input['action'] == "results")
 		// Fetch dot icons if enabled
 		if($mybb->settings['dotfolders'] != 0 && $mybb->user['uid'] && $thread_cache)
 		{
-			$p_unapproved_where = str_replace('t.', '', $unapproved_where);
-			$query = $db->simple_select("posts", "DISTINCT tid,uid", "uid='{$mybb->user['uid']}' AND tid IN({$thread_ids}) AND {$p_unapproved_where}");
+			$unapproved_where_p = str_replace('t.', '', $unapproved_where_t);
+			$query = $db->simple_select("posts", "DISTINCT tid,uid", "uid='{$mybb->user['uid']}' AND tid IN({$thread_ids}) AND ({$unapproved_where_p})");
 			while($thread = $db->fetch_array($query))
 			{
 				$thread_cache[$thread['tid']]['dot_icon'] = 1;
@@ -478,12 +461,19 @@ if($mybb->input['action'] == "results")
 			}
 			else
 			{
-				$forum_read = $forumsread[$thread['fid']];
+				if(isset($forumsread[$thread['fid']]))
+				{
+					$forum_read = $forumsread[$thread['fid']];
+				}
+				else
+				{
+					$forum_read = '';
+				}
 			}
 
 			if($mybb->settings['threadreadcut'] > 0 && $mybb->user['uid'] && $thread['lastpost'] > $forum_read)
 			{
-				if($thread['lastread'])
+				if(isset($thread['lastread']))
 				{
 					$last_read = $thread['lastread'];
 				}
@@ -524,8 +514,8 @@ if($mybb->input['action'] == "results")
 			}
 			if($thread['closed'] == 1)
 			{
-				$folder .= "lock";
-				$folder_label .= $lang->icon_lock;
+				$folder .= "close";
+				$folder_label .= $lang->icon_close;
 			}
 			$folder .= "folder";
 
@@ -539,11 +529,18 @@ if($mybb->input['action'] == "results")
 			$threadpages = '';
 			$morelink = '';
 			$thread['posts'] = $thread['replies'] + 1;
-			if(is_moderator($thread['fid'], "canviewunapprove"))
+			if(is_moderator($thread['fid'], "canviewdeleted") == true || is_moderator($thread['fid'], "canviewunapprove") == true)
 			{
-				$thread['posts'] += $thread['unapprovedposts'];
+				if(is_moderator($thread['fid'], "canviewdeleted") == true)
+				{
+					$thread['posts'] += $thread['deletedposts'];
+				}
+				if(is_moderator($thread['fid'], "canviewunapprove") == true)
+				{
+					$thread['posts'] += $thread['unapprovedposts'];
+				}
 			}
-			if(is_moderator($thread['fid'], "canviewdeleted"))
+			elseif($group_permissions[$thread['fid']]['canviewdeletionnotice'] != 0)
 			{
 				$thread['posts'] += $thread['deletedposts'];
 			}
@@ -576,9 +573,16 @@ if($mybb->input['action'] == "results")
 				$thread['multipage'] = '';
 			}
 			$lastpostdate = my_date('relative', $thread['lastpost']);
-			$lastposter = htmlspecialchars_uni($thread['lastposter']);
 			$thread['lastpostlink'] = get_thread_link($thread['tid'], 0, "lastpost");
 			$lastposteruid = $thread['lastposteruid'];
+			if(!$lastposteruid && !$thread['lastposter'])
+			{
+				$lastposter = htmlspecialchars_uni($lang->guest);
+			}
+			else
+			{
+				$lastposter = htmlspecialchars_uni($thread['lastposter']);
+			}
 			$thread_link = get_thread_link($thread['tid']);
 
 			// Don't link to guest's profiles (they have no profile).
@@ -637,7 +641,7 @@ if($mybb->input['action'] == "results")
 			$inline_mod_checkbox = '';
 			if($is_supermod || is_moderator($thread['fid']))
 			{
-				if(isset($mybb->cookies[$inlinecookie]) && my_strpos($mybb->cookies[$inlinecookie], "|{$thread['tid']}|"))
+				if(isset($mybb->cookies[$inlinecookie]) && my_strpos($mybb->cookies[$inlinecookie], "|{$thread['tid']}|") !== false)
 				{
 					$inlinecheck = "checked=\"checked\"";
 					++$inlinecount;
@@ -646,6 +650,10 @@ if($mybb->input['action'] == "results")
 				{
 					$inlinecheck = '';
 				}
+
+				// If this user is allowed to use the inline moderation tools for at least one thread, include the necessary scripts
+				$show_inline_moderation = true;
+
 				eval("\$inline_mod_checkbox = \"".$templates->get("search_results_threads_inlinecheck")."\";");
 			}
 			elseif($is_mod)
@@ -666,9 +674,14 @@ if($mybb->input['action'] == "results")
 			$upper = $threadcount;
 		}
 
+		$selectall = '';
+		$inlinemod = '';
+
 		// Inline Thread Moderation Options
-		if($is_mod)
+		if($show_inline_moderation)
 		{
+			eval("\$inlinemodcol = \"".$templates->get("search_results_inlinemodcol")."\";");
+
 			// If user has moderation tools available, prepare the Select All feature
 			$lang->page_selected = $lang->sprintf($lang->page_selected, count($thread_cache));
 			$lang->all_selected = $lang->sprintf($lang->all_selected, (int)$threadcount);
@@ -688,6 +701,7 @@ if($mybb->input['action'] == "results")
 
 			while($tool = $db->fetch_array($query))
 			{
+				$tool['name'] = htmlspecialchars_uni($tool['name']);
 				eval("\$customthreadtools .= \"".$templates->get("search_results_threads_inlinemoderation_custom_tool")."\";");
 			}
 			// Build inline moderation dropdown
@@ -697,6 +711,10 @@ if($mybb->input['action'] == "results")
 			}
 			eval("\$inlinemod = \"".$templates->get("search_results_threads_inlinemoderation")."\";");
 		}
+		elseif($is_mod)
+		{
+			eval("\$inlinemodcol = \"".$templates->get("search_results_inlinemodcol_empty")."\";");
+		}
 
 		$plugins->run_hooks("search_results_end");
 
@@ -705,55 +723,15 @@ if($mybb->input['action'] == "results")
 	}
 	else // Displaying results as posts
 	{
-		if(!$search['posts'])
+		if(empty($search['posts']))
 		{
 			error($lang->error_nosearchresults);
 		}
 
 		$postcount = 0;
 
-		// Moderators can view unapproved threads
-		$query = $db->simple_select("moderators", "fid, canviewunapprove, canviewdeleted", "(id='{$mybb->user['uid']}' AND isgroup='0') OR (id='{$mybb->user['usergroup']}' AND isgroup='1')");
-		if($mybb->usergroup['issupermod'] == 1)
-		{
-			// Super moderators (and admins)
-			$unapproved_where = "visible >= -1";
-		}
-		elseif($db->num_rows($query))
-		{
-			// Normal moderators
-			$unapprove_forums = array();
-			$deleted_forums = array();
-			$unapproved_where = '(visible = 1';
-
-			while($moderator = $db->fetch_array($query))
-			{
-				if($moderator['canviewunapprove'] == 1)
-				{
-					$unapprove_forums[] = $moderator['fid'];
-				}
-
-				if($moderator['canviewdeleted'] == 1)
-				{
-					$deleted_forums[] = $moderator['fid'];
-				}
-			}
-
-			if(!empty($unapprove_forums))
-			{
-				$unapproved_where .= " OR (visible = 0 AND fid IN(".implode(',', $unapprove_forums)."))";
-			}
-			if(!empty($deleted_forums))
-			{
-				$unapproved_where .= " OR (visible = -1 AND fid IN(".implode(',', $deleted_forums)."))";
-			}
-			$unapproved_where .= ')';
-		}
-		else
-		{
-			// Normal users
-			$unapproved_where = 'visible = 1';
-		}
+		// Moderators can view unapproved threads and deleted threads from forums they moderate
+		$unapproved_where = get_visible_where();
 
 		$post_cache_options = array();
 		if((int)$mybb->settings['searchhardlimit'] > 0)
@@ -770,7 +748,7 @@ if($mybb->input['action'] == "results")
 		$tids = array();
 		$pids = array();
 		// Make sure the posts we're viewing we have permission to view.
-		$query = $db->simple_select("posts", "pid, tid", "pid IN(".$db->escape_string($search['posts']).") AND {$unapproved_where}", $post_cache_options);
+		$query = $db->simple_select("posts", "pid, tid", "pid IN(".$db->escape_string($search['posts']).") AND ({$unapproved_where})", $post_cache_options);
 		while($post = $db->fetch_array($query))
 		{
 			$pids[$post['pid']] = $post['tid'];
@@ -808,11 +786,11 @@ if($mybb->input['action'] == "results")
 				$permsql .= " OR fid IN ($inactiveforums)";
 			}
 
-			// Check the thread records as well. If we don't have permissions, remove them from the listing.
-			$query = $db->simple_select("threads", "tid", "tid IN(".$db->escape_string(implode(',', $pids)).") AND ({$unapproved_where}{$permsql} OR closed LIKE 'moved|%')");
+			// Find threads in our list that we don't have permission to view and remove them
+			$query = $db->simple_select("threads", "tid", "tid IN(".$db->escape_string(implode(',', array_keys($tids))).") AND (NOT ({$unapproved_where}){$permsql} OR closed LIKE 'moved|%')");
 			while($thread = $db->fetch_array($query))
 			{
-				if(array_key_exists($thread['tid'], $tids) != true)
+				if(array_key_exists($thread['tid'], $tids))
 				{
 					$temp_pids = $tids[$thread['tid']];
 					foreach($temp_pids as $pid)
@@ -820,6 +798,7 @@ if($mybb->input['action'] == "results")
 						unset($pids[$pid]);
 						unset($tids[$thread['tid']]);
 					}
+					unset($tids[$thread['tid']]);
 				}
 			}
 			unset($temp_pids);
@@ -851,7 +830,7 @@ if($mybb->input['action'] == "results")
 		$dot_icon = array();
 		if($mybb->settings['dotfolders'] != 0 && $mybb->user['uid'] != 0)
 		{
-			$query = $db->simple_select("posts", "DISTINCT tid,uid", "uid='{$mybb->user['uid']}' AND tid IN({$db->escape_string($tids)}) AND {$unapproved_where}");
+			$query = $db->simple_select("posts", "DISTINCT tid,uid", "uid='{$mybb->user['uid']}' AND tid IN({$db->escape_string($tids)}) AND ({$unapproved_where})");
 			while($post = $db->fetch_array($query))
 			{
 				$dot_icon[$post['tid']] = true;
@@ -860,11 +839,19 @@ if($mybb->input['action'] == "results")
 
 		$results = '';
 
+		$pages = ceil($postcount / $perpage);
+		if($page > $pages)
+		{
+			$start = 0;
+			$page = 1;
+		}
+
 		$query = $db->query("
 			SELECT p.*, u.username AS userusername, t.subject AS thread_subject, t.replies AS thread_replies, t.views AS thread_views, t.lastpost AS thread_lastpost, t.closed AS thread_closed, t.uid as thread_uid
 			FROM ".TABLE_PREFIX."posts p
 			LEFT JOIN ".TABLE_PREFIX."threads t ON (t.tid=p.tid)
 			LEFT JOIN ".TABLE_PREFIX."users u ON (u.uid=p.uid)
+			LEFT JOIN ".TABLE_PREFIX."forums f ON (t.fid=f.fid)
 			WHERE p.pid IN (".$db->escape_string($search['posts']).")
 			ORDER BY $sortfield $order
 			LIMIT $start, $perpage
@@ -904,7 +891,7 @@ if($mybb->input['action'] == "results")
 			}
 
 			$post['forumlink'] = '';
-			if(!empty($forumcache[$thread['fid']]))
+			if(!empty($forumcache[$post['fid']]))
 			{
 				$post['forumlink_link'] = get_forum_link($post['fid']);
 				$post['forumlink_name'] = $forumcache[$post['fid']]['name'];
@@ -918,7 +905,15 @@ if($mybb->input['action'] == "results")
 			$isnew = 0;
 			$donenew = 0;
 			$last_read = 0;
-			$post['thread_lastread'] = $readthreads[$post['tid']];
+
+			if(isset($readthreads[$post['tid']]))
+			{
+				$post['thread_lastread'] = $readthreads[$post['tid']];
+			}
+			else
+			{
+				$post['thread_lastread'] = '';
+			}
 
 			if($mybb->settings['threadreadcut'] > 0 && $mybb->user['uid'])
 			{
@@ -932,7 +927,14 @@ if($mybb->input['action'] == "results")
 			}
 			else
 			{
-				$forum_read = $forumsread[$post['fid']];
+				if(isset($forumsread[$post['fid']]))
+				{
+					$forum_read = $forumsread[$post['fid']];
+				}
+				else
+				{
+					$forum_read = '';
+				}
 			}
 
 			if($mybb->settings['threadreadcut'] > 0 && $mybb->user['uid'] && $post['thread_lastpost'] > $forum_read)
@@ -993,8 +995,8 @@ if($mybb->input['action'] == "results")
 			}
 			if($post['thread_closed'] == 1)
 			{
-				$folder .= "lock";
-				$folder_label .= $lang->icon_lock;
+				$folder .= "close";
+				$folder_label .= $lang->icon_close;
 			}
 			$folder .= "folder";
 
@@ -1027,9 +1029,10 @@ if($mybb->input['action'] == "results")
 				'allow_mycode' => 1,
 				'allow_smilies' => 0,
 				'allow_imgcode' => 0,
+				'me_username' => $post['username'],
 				'filter_badwords' => 1
 			);
-			$post['message'] = strip_tags($parser->parse_message($post['message'], $parser_options));
+			$post['message'] = strip_tags($parser->text_parse_message($post['message'], $parser_options));
 			if(my_strlen($post['message']) > 200)
 			{
 				$prev = my_substr($post['message'], 0, 200)."...";
@@ -1047,7 +1050,7 @@ if($mybb->input['action'] == "results")
 			$inline_mod_checkbox = '';
 			if($is_supermod || is_moderator($post['fid']))
 			{
-				if(isset($mybb->cookies[$inlinecookie]) && my_strpos($mybb->cookies[$inlinecookie], "|{$post['pid']}|"))
+				if(isset($mybb->cookies[$inlinecookie]) && my_strpos($mybb->cookies[$inlinecookie], "|{$post['pid']}|") !== false)
 				{
 					$inlinecheck = "checked=\"checked\"";
 					++$inlinecount;
@@ -1056,6 +1059,9 @@ if($mybb->input['action'] == "results")
 				{
 					$inlinecheck = '';
 				}
+
+				$show_inline_moderation = true;
+
 				eval("\$inline_mod_checkbox = \"".$templates->get("search_results_posts_inlinecheck")."\";");
 			}
 			elseif($is_mod)
@@ -1076,9 +1082,14 @@ if($mybb->input['action'] == "results")
 			$upper = $postcount;
 		}
 
+		$selectall = '';
+		$inlinemod = '';
+
 		// Inline Post Moderation Options
-		if($is_mod)
+		if($show_inline_moderation)
 		{
+			eval("\$inlinemodcol = \"".$templates->get("search_results_inlinemodcol")."\";");
+
 			// If user has moderation tools available, prepare the Select All feature
 			$num_results = $db->num_rows($query);
 			$lang->page_selected = $lang->sprintf($lang->page_selected, (int)$num_results);
@@ -1108,6 +1119,10 @@ if($mybb->input['action'] == "results")
 			}
 			eval("\$inlinemod = \"".$templates->get("search_results_posts_inlinemoderation")."\";");
 		}
+		elseif($is_mod)
+		{
+			eval("\$inlinemodcol = \"".$templates->get("search_results_inlinemodcol_empty")."\";");
+		}
 
 		$plugins->run_hooks("search_results_end");
 
@@ -1130,6 +1145,10 @@ elseif($mybb->input['action'] == "findguest")
 		$where_sql .= " AND fid NOT IN ($inactiveforums)";
 	}
 
+	// Moderators can view unapproved threads and deleted threads from forums they moderate
+	$unapproved_where = get_visible_where();
+	$where_sql .= " AND ({$unapproved_where})";
+
 	$permsql = "";
 	$onlyusfids = array();
 
@@ -1148,8 +1167,7 @@ elseif($mybb->input['action'] == "findguest")
 	}
 
 	$options = array(
-		'order_by' => 'dateline',
-		'order_dir' => 'desc'
+		'order_by' => 'dateline DESC, pid DESC',
 	);
 
 	// Do we have a hard search limit?
@@ -1163,8 +1181,8 @@ elseif($mybb->input['action'] == "findguest")
 	$query = $db->simple_select("posts", "pid", "{$where_sql}", $options);
 	while($pid = $db->fetch_field($query, "pid"))
 	{
-			$pids .= $comma.$pid;
-			$comma = ',';
+		$pids .= $comma.$pid;
+		$comma = ',';
 	}
 
 	$tids = '';
@@ -1172,8 +1190,8 @@ elseif($mybb->input['action'] == "findguest")
 	$query = $db->simple_select("threads", "tid", $where_sql);
 	while($tid = $db->fetch_field($query, "tid"))
 	{
-			$tids .= $comma.$tid;
-			$comma = ',';
+		$tids .= $comma.$tid;
+		$comma = ',';
 	}
 
 	$sid = md5(uniqid(microtime(), true));
@@ -1207,6 +1225,10 @@ elseif($mybb->input['action'] == "finduser")
 		$where_sql .= " AND fid NOT IN ($inactiveforums)";
 	}
 
+	// Moderators can view unapproved threads and deleted threads from forums they moderate
+	$unapproved_where = get_visible_where();
+	$where_sql .= " AND ({$unapproved_where})";
+
 	$permsql = "";
 	$onlyusfids = array();
 
@@ -1225,8 +1247,7 @@ elseif($mybb->input['action'] == "finduser")
 	}
 
 	$options = array(
-		'order_by' => 'dateline',
-		'order_dir' => 'desc'
+		'order_by' => 'dateline DESC, pid DESC',
 	);
 
 	// Do we have a hard search limit?
@@ -1240,8 +1261,8 @@ elseif($mybb->input['action'] == "finduser")
 	$query = $db->simple_select("posts", "pid", "{$where_sql}", $options);
 	while($pid = $db->fetch_field($query, "pid"))
 	{
-			$pids .= $comma.$pid;
-			$comma = ',';
+		$pids .= $comma.$pid;
+		$comma = ',';
 	}
 
 	$tids = '';
@@ -1249,8 +1270,8 @@ elseif($mybb->input['action'] == "finduser")
 	$query = $db->simple_select("threads", "tid", $where_sql);
 	while($tid = $db->fetch_field($query, "tid"))
 	{
-			$tids .= $comma.$tid;
-			$comma = ',';
+		$tids .= $comma.$tid;
+		$comma = ',';
 	}
 
 	$sid = md5(uniqid(microtime(), true));
@@ -1271,18 +1292,22 @@ elseif($mybb->input['action'] == "finduser")
 }
 elseif($mybb->input['action'] == "finduserthreads")
 {
-	$where_sql = "t.uid='".$mybb->get_input('uid', MyBB::INPUT_INT)."'";
+	$where_sql = "uid='".$mybb->get_input('uid', MyBB::INPUT_INT)."'";
 
 	$unsearchforums = get_unsearchable_forums();
 	if($unsearchforums)
 	{
-		$where_sql .= " AND t.fid NOT IN ($unsearchforums)";
+		$where_sql .= " AND fid NOT IN ($unsearchforums)";
 	}
 	$inactiveforums = get_inactive_forums();
 	if($inactiveforums)
 	{
-		$where_sql .= " AND t.fid NOT IN ($inactiveforums)";
+		$where_sql .= " AND fid NOT IN ($inactiveforums)";
 	}
+
+	// Moderators can view unapproved threads and deleted threads from forums they moderate
+	$unapproved_where = get_visible_where();
+	$where_sql .= " AND ({$unapproved_where})";
 
 	$permsql = "";
 	$onlyusfids = array();
@@ -1298,7 +1323,16 @@ elseif($mybb->input['action'] == "finduserthreads")
 	}
 	if(!empty($onlyusfids))
 	{
-		$where_sql .= "AND ((t.fid IN(".implode(',', $onlyusfids).") AND t.uid='{$mybb->user['uid']}') OR t.fid NOT IN(".implode(',', $onlyusfids)."))";
+		$where_sql .= "AND ((fid IN(".implode(',', $onlyusfids).") AND uid='{$mybb->user['uid']}') OR fid NOT IN(".implode(',', $onlyusfids)."))";
+	}
+
+	$tids = '';
+	$comma = '';
+	$query = $db->simple_select("threads", "tid", $where_sql);
+	while($tid = $db->fetch_field($query, "tid"))
+	{
+		$tids .= $comma.$tid;
+		$comma = ',';
 	}
 
 	$sid = md5(uniqid(microtime(), true));
@@ -1307,7 +1341,7 @@ elseif($mybb->input['action'] == "finduserthreads")
 		"uid" => $mybb->user['uid'],
 		"dateline" => TIME_NOW,
 		"ipaddress" => $db->escape_binary($session->packedip),
-		"threads" => '',
+		"threads" => $db->escape_string($tids),
 		"posts" => '',
 		"resulttype" => "threads",
 		"querycache" => $db->escape_string($where_sql),
@@ -1320,11 +1354,11 @@ elseif($mybb->input['action'] == "finduserthreads")
 elseif($mybb->input['action'] == "getnew")
 {
 
-	$where_sql = "t.lastpost >= '".(int)$mybb->user['lastvisit']."'";
+	$where_sql = "lastpost >= '".(int)$mybb->user['lastvisit']."'";
 
 	if($mybb->get_input('fid', MyBB::INPUT_INT))
 	{
-		$where_sql .= " AND t.fid='".$mybb->get_input('fid', MyBB::INPUT_INT)."'";
+		$where_sql .= " AND fid='".$mybb->get_input('fid', MyBB::INPUT_INT)."'";
 	}
 	else if($mybb->get_input('fids'))
 	{
@@ -1336,20 +1370,24 @@ elseif($mybb->input['action'] == "getnew")
 
 		if(!empty($fids))
 		{
-			$where_sql .= " AND t.fid IN (".implode(',', $fids).")";
+			$where_sql .= " AND fid IN (".implode(',', $fids).")";
 		}
 	}
 
 	$unsearchforums = get_unsearchable_forums();
 	if($unsearchforums)
 	{
-		$where_sql .= " AND t.fid NOT IN ($unsearchforums)";
+		$where_sql .= " AND fid NOT IN ($unsearchforums)";
 	}
 	$inactiveforums = get_inactive_forums();
 	if($inactiveforums)
 	{
-		$where_sql .= " AND t.fid NOT IN ($inactiveforums)";
+		$where_sql .= " AND fid NOT IN ($inactiveforums)";
 	}
+
+	// Moderators can view unapproved threads and deleted threads from forums they moderate
+	$unapproved_where = get_visible_where();
+	$where_sql .= " AND ({$unapproved_where})";
 
 	$permsql = "";
 	$onlyusfids = array();
@@ -1365,7 +1403,16 @@ elseif($mybb->input['action'] == "getnew")
 	}
 	if(!empty($onlyusfids))
 	{
-		$where_sql .= "AND ((t.fid IN(".implode(',', $onlyusfids).") AND t.uid='{$mybb->user['uid']}') OR t.fid NOT IN(".implode(',', $onlyusfids)."))";
+		$where_sql .= "AND ((fid IN(".implode(',', $onlyusfids).") AND uid='{$mybb->user['uid']}') OR fid NOT IN(".implode(',', $onlyusfids)."))";
+	}
+
+	$tids = '';
+	$comma = '';
+	$query = $db->simple_select("threads", "tid", $where_sql);
+	while($tid = $db->fetch_field($query, "tid"))
+	{
+		$tids .= $comma.$tid;
+		$comma = ',';
 	}
 
 	$sid = md5(uniqid(microtime(), true));
@@ -1374,7 +1421,7 @@ elseif($mybb->input['action'] == "getnew")
 		"uid" => $mybb->user['uid'],
 		"dateline" => TIME_NOW,
 		"ipaddress" => $db->escape_binary($session->packedip),
-		"threads" => '',
+		"threads" => $db->escape_string($tids),
 		"posts" => '',
 		"resulttype" => "threads",
 		"querycache" => $db->escape_string($where_sql),
@@ -1397,11 +1444,11 @@ elseif($mybb->input['action'] == "getdaily")
 	}
 	$datecut = TIME_NOW-(86400*$days);
 
-	$where_sql = "t.lastpost >='".$datecut."'";
+	$where_sql = "lastpost >='".$datecut."'";
 
 	if($mybb->get_input('fid', MyBB::INPUT_INT))
 	{
-		$where_sql .= " AND t.fid='".$mybb->get_input('fid', MyBB::INPUT_INT)."'";
+		$where_sql .= " AND fid='".$mybb->get_input('fid', MyBB::INPUT_INT)."'";
 	}
 	else if($mybb->get_input('fids'))
 	{
@@ -1413,20 +1460,24 @@ elseif($mybb->input['action'] == "getdaily")
 
 		if(!empty($fids))
 		{
-			$where_sql .= " AND t.fid IN (".implode(',', $fids).")";
+			$where_sql .= " AND fid IN (".implode(',', $fids).")";
 		}
 	}
 
 	$unsearchforums = get_unsearchable_forums();
 	if($unsearchforums)
 	{
-		$where_sql .= " AND t.fid NOT IN ($unsearchforums)";
+		$where_sql .= " AND fid NOT IN ($unsearchforums)";
 	}
 	$inactiveforums = get_inactive_forums();
 	if($inactiveforums)
 	{
-		$where_sql .= " AND t.fid NOT IN ($inactiveforums)";
+		$where_sql .= " AND fid NOT IN ($inactiveforums)";
 	}
+
+	// Moderators can view unapproved threads and deleted threads from forums they moderate
+	$unapproved_where = get_visible_where();
+	$where_sql .= " AND ({$unapproved_where})";
 
 	$permsql = "";
 	$onlyusfids = array();
@@ -1442,7 +1493,16 @@ elseif($mybb->input['action'] == "getdaily")
 	}
 	if(!empty($onlyusfids))
 	{
-		$where_sql .= "AND ((t.fid IN(".implode(',', $onlyusfids).") AND t.uid='{$mybb->user['uid']}') OR t.fid NOT IN(".implode(',', $onlyusfids)."))";
+		$where_sql .= "AND ((fid IN(".implode(',', $onlyusfids).") AND uid='{$mybb->user['uid']}') OR fid NOT IN(".implode(',', $onlyusfids)."))";
+	}
+
+	$tids = '';
+	$comma = '';
+	$query = $db->simple_select("threads", "tid", $where_sql);
+	while($tid = $db->fetch_field($query, "tid"))
+	{
+		$tids .= $comma.$tid;
+		$comma = ',';
 	}
 
 	$sid = md5(uniqid(microtime(), true));
@@ -1451,7 +1511,7 @@ elseif($mybb->input['action'] == "getdaily")
 		"uid" => $mybb->user['uid'],
 		"dateline" => TIME_NOW,
 		"ipaddress" => $db->escape_binary($session->packedip),
-		"threads" => '',
+		"threads" => $db->escape_string($tids),
 		"posts" => '',
 		"resulttype" => "threads",
 		"querycache" => $db->escape_string($where_sql),
@@ -1462,7 +1522,7 @@ elseif($mybb->input['action'] == "getdaily")
 	$db->insert_query("searchlog", $searcharray);
 	redirect("search.php?action=results&sid=".$sid, $lang->redirect_searchresults);
 }
-elseif($mybb->input['action'] == "do_search" && $mybb->request_method == "post")
+elseif($mybb->input['action'] == "do_search")
 {
 	$plugins->run_hooks("search_do_search_start");
 
@@ -1482,7 +1542,7 @@ elseif($mybb->input['action'] == "do_search" && $mybb->request_method == "post")
 		$query = $db->simple_select("searchlog", "*", "$conditions AND dateline > '$timecut'", array('order_by' => "dateline", 'order_dir' => "DESC"));
 		$last_search = $db->fetch_array($query);
 		// Users last search was within the flood time, show the error
-		if($last_search['sid'])
+		if(!empty($last_search['sid']))
 		{
 			$remaining_time = $mybb->settings['searchfloodtime']-(TIME_NOW-$last_search['dateline']);
 			if($remaining_time == 1)
@@ -1505,6 +1565,15 @@ elseif($mybb->input['action'] == "do_search" && $mybb->request_method == "post")
 		$resulttype = "posts";
 	}
 
+	if(isset($mybb->input['forums']) && is_array($mybb->input['forums']))
+	{
+		$forums = $mybb->get_input('forums', MyBB::INPUT_ARRAY);
+	}
+	else
+	{
+		$forums = array($mybb->get_input('forums'));
+	}
+
 	$search_data = array(
 		"keywords" => $mybb->input['keywords'],
 		"author" => $mybb->get_input('author'),
@@ -1512,7 +1581,7 @@ elseif($mybb->input['action'] == "do_search" && $mybb->request_method == "post")
 		"matchusername" => $mybb->get_input('matchusername', MyBB::INPUT_INT),
 		"postdate" => $mybb->get_input('postdate', MyBB::INPUT_INT),
 		"pddir" => $mybb->get_input('pddir', MyBB::INPUT_INT),
-		"forums" => $mybb->input['forums'],
+		"forums" => $forums,
 		"findthreadst" => $mybb->get_input('findthreadst', MyBB::INPUT_INT),
 		"numreplies" => $mybb->get_input('numreplies', MyBB::INPUT_INT),
 		"threadprefix" => $mybb->get_input('threadprefix', MyBB::INPUT_ARRAY)
@@ -1613,20 +1682,23 @@ else if($mybb->input['action'] == "thread")
 		$query = $db->simple_select("searchlog", "*", "$conditions AND dateline > '$timecut'", array('order_by' => "dateline", 'order_dir' => "DESC"));
 		$last_search = $db->fetch_array($query);
 
-		// We shouldn't show remaining time if time is 0 or under.
-		$remaining_time = $mybb->settings['searchfloodtime']-(TIME_NOW-$last_search['dateline']);
-		// Users last search was within the flood time, show the error.
-		if($last_search['sid'] && $remaining_time > 0)
+		if($last_search)
 		{
-			if($remaining_time == 1)
+			// We shouldn't show remaining time if time is 0 or under.
+			$remaining_time = $mybb->settings['searchfloodtime']-(TIME_NOW-$last_search['dateline']);
+			// Users last search was within the flood time, show the error.
+			if($remaining_time > 0)
 			{
-				$lang->error_searchflooding = $lang->sprintf($lang->error_searchflooding_1, $mybb->settings['searchfloodtime']);
+				if($remaining_time == 1)
+				{
+					$lang->error_searchflooding = $lang->sprintf($lang->error_searchflooding_1, $mybb->settings['searchfloodtime']);
+				}
+				else
+				{
+					$lang->error_searchflooding = $lang->sprintf($lang->error_searchflooding, $mybb->settings['searchfloodtime'], $remaining_time);
+				}
+				error($lang->error_searchflooding);
 			}
-			else
-			{
-				$lang->error_searchflooding = $lang->sprintf($lang->error_searchflooding, $mybb->settings['searchfloodtime'], $remaining_time);
-			}
-			error($lang->error_searchflooding);
 		}
 	}
 
@@ -1690,5 +1762,3 @@ else
 	eval("\$search = \"".$templates->get("search")."\";");
 	output_page($search);
 }
-
-

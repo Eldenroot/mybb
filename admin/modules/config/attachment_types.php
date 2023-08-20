@@ -89,6 +89,7 @@ if($mybb->input['action'] == "add")
 				"maxsize" => $maxsize,
 				"icon" => $db->escape_string($mybb->input['icon']),
 				'enabled' => $mybb->get_input('enabled', MyBB::INPUT_INT),
+				'forcedownload' => $mybb->get_input('forcedownload', MyBB::INPUT_INT),
 				'groups' => $db->escape_string($mybb->get_input('groups')),
 				'forums' => $db->escape_string($mybb->get_input('forums')),
 				'avatarfile' => $mybb->get_input('avatarfile', MyBB::INPUT_INT)
@@ -99,7 +100,7 @@ if($mybb->input['action'] == "add")
 			$plugins->run_hooks("admin_config_attachment_types_add_commit");
 
 			// Log admin action
-			log_admin_action($atid, htmlspecialchars_uni($mybb->input['extension']));
+			log_admin_action($atid, $mybb->input['extension']);
 
 			$cache->update_attachtypes();
 
@@ -278,17 +279,20 @@ if($mybb->input['action'] == "add")
 	<script type=\"text/javascript\">
 		checkAction('forums');
 	</script>";
+	
+	$mybb->input['forcedownload'] = $mybb->get_input('forcedownload', MyBB::INPUT_INT);
 
 	$form_container = new FormContainer($lang->add_new_attachment_type);
-	$form_container->output_row($lang->name, $lang->name_desc, $form->generate_text_box('name', $mybb->input['name'], array('id' => 'name')), 'name');
-	$form_container->output_row($lang->file_extension." <em>*</em>", $lang->file_extension_desc, $form->generate_text_box('extension', $mybb->input['extension'], array('id' => 'extension')), 'extension');
-	$form_container->output_row($lang->mime_type." <em>*</em>", $lang->mime_type_desc, $form->generate_text_box('mimetype', $mybb->input['mimetype'], array('id' => 'mimetype')), 'mimetype');
-	$form_container->output_row($lang->maximum_file_size, $lang->maximum_file_size_desc.$limit_string, $form->generate_numeric_field('maxsize', $mybb->input['maxsize'], array('id' => 'maxsize', 'min' => 0)), 'maxsize');
-	$form_container->output_row($lang->attachment_icon, $lang->attachment_icon_desc, $form->generate_text_box('icon', $mybb->input['icon'], array('id' => 'icon')), 'icon');
-	$form_container->output_row($lang->enabled, '', $form->generate_yes_no_radio('enabled', $mybb->input['enabled']), 'enabled');
+	$form_container->output_row($lang->name, $lang->name_desc, $form->generate_text_box('name', $mybb->get_input('name'), array('id' => 'name')), 'name');
+	$form_container->output_row($lang->file_extension." <em>*</em>", $lang->file_extension_desc, $form->generate_text_box('extension', $mybb->get_input('extension'), array('id' => 'extension')), 'extension');
+	$form_container->output_row($lang->mime_type." <em>*</em>", $lang->mime_type_desc, $form->generate_text_box('mimetype', $mybb->get_input('mimetype'), array('id' => 'mimetype')), 'mimetype');
+	$form_container->output_row($lang->maximum_file_size, $lang->maximum_file_size_desc.$limit_string, $form->generate_numeric_field('maxsize', $mybb->get_input('maxsize'), array('id' => 'maxsize', 'min' => 0)), 'maxsize');
+	$form_container->output_row($lang->attachment_icon, $lang->attachment_icon_desc, $form->generate_text_box('icon', $mybb->get_input('icon'), array('id' => 'icon')), 'icon');
+	$form_container->output_row($lang->enabled, '', $form->generate_yes_no_radio('enabled', $mybb->get_input('enabled')), 'enabled');
+	$form_container->output_row($lang->forcedownload, $lang->forcedownload_desc, $form->generate_yes_no_radio('forcedownload', $mybb->get_input('forcedownload')), 'forcedownload');
 	$form_container->output_row($lang->available_to_groups, '', $groups_select_code, '', array(), array('id' => 'row_groups'));
 	$form_container->output_row($lang->available_in_forums, '', $forums_select_code, '', array(), array('id' => 'row_forums'));
-	$form_container->output_row($lang->avatar_file, $lang->avatar_file_desc, $form->generate_yes_no_radio('avatarfile', $mybb->input['avatarfile']), 'avatarfile');
+	$form_container->output_row($lang->avatar_file, $lang->avatar_file_desc, $form->generate_yes_no_radio('avatarfile', $mybb->get_input('avatarfile')), 'avatarfile');
 
 	$form_container->end();
 
@@ -373,6 +377,7 @@ if($mybb->input['action'] == "edit")
 				"maxsize" => $mybb->get_input('maxsize', MyBB::INPUT_INT),
 				"icon" => $db->escape_string($mybb->input['icon']),
 				'enabled' => $mybb->get_input('enabled', MyBB::INPUT_INT),
+				'forcedownload' => $mybb->get_input('forcedownload', MyBB::INPUT_INT),
 				'groups' => $db->escape_string($mybb->get_input('groups')),
 				'forums' => $db->escape_string($mybb->get_input('forums')),
 				'avatarfile' => $mybb->get_input('avatarfile', MyBB::INPUT_INT)
@@ -383,7 +388,7 @@ if($mybb->input['action'] == "edit")
 			$db->update_query("attachtypes", $updated_type, "atid='{$attachment_type['atid']}'");
 
 			// Log admin action
-			log_admin_action($attachment_type['atid'], htmlspecialchars_uni($mybb->input['extension']));
+			log_admin_action($attachment_type['atid'], $mybb->input['extension']);
 
 			$cache->update_attachtypes();
 
@@ -557,6 +562,8 @@ if($mybb->input['action'] == "edit")
 		checkAction('forums');
 	</script>";
 
+	$mybb->input['forcedownload'] = $mybb->get_input('forcedownload', MyBB::INPUT_INT);
+
 	$form_container = new FormContainer($lang->edit_attachment_type);
 	$form_container->output_row($lang->name, $lang->name_desc, $form->generate_text_box('name', $mybb->input['name'], array('id' => 'name')), 'name');
 	$form_container->output_row($lang->file_extension." <em>*</em>", $lang->file_extension_desc, $form->generate_text_box('extension', $mybb->input['extension'], array('id' => 'extension')), 'extension');
@@ -564,6 +571,7 @@ if($mybb->input['action'] == "edit")
 	$form_container->output_row($lang->maximum_file_size, $lang->maximum_file_size_desc.$limit_string, $form->generate_numeric_field('maxsize', $mybb->input['maxsize'], array('id' => 'maxsize', 'min' => 0)), 'maxsize');
 	$form_container->output_row($lang->attachment_icon, $lang->attachment_icon_desc, $form->generate_text_box('icon', $mybb->input['icon'], array('id' => 'icon')), 'icon');
 	$form_container->output_row($lang->enabled, '', $form->generate_yes_no_radio('enabled', $mybb->input['enabled']), 'enabled');
+	$form_container->output_row($lang->forcedownload, $lang->forcedownload_desc, $form->generate_yes_no_radio('forcedownload', $mybb->input['forcedownload']), 'forcedownload');
 	$form_container->output_row($lang->available_to_groups, '', $groups_select_code, '', array(), array('id' => 'row_groups'));
 	$form_container->output_row($lang->available_in_forums, '', $forums_select_code, '', array(), array('id' => 'row_forums'));
 	$form_container->output_row($lang->avatar_file, $lang->avatar_file_desc, $form->generate_yes_no_radio('avatarfile', $mybb->input['avatarfile']), 'avatarfile');
@@ -580,7 +588,7 @@ if($mybb->input['action'] == "edit")
 
 if($mybb->input['action'] == "delete")
 {
-	if($mybb->input['no'])
+	if($mybb->get_input('no'))
 	{
 		admin_redirect("index.php?module=config-attachment_types");
 	}
@@ -605,7 +613,7 @@ if($mybb->input['action'] == "delete")
 		$cache->update_attachtypes();
 
 		// Log admin action
-		log_admin_action($attachment_type['atid'], htmlspecialchars_uni($attachment_type['extension']));
+		log_admin_action($attachment_type['atid'], $attachment_type['extension']);
 
 		flash_message($lang->success_attachment_type_deleted, 'success');
 		admin_redirect("index.php?module=config-attachment_types");
@@ -618,7 +626,7 @@ if($mybb->input['action'] == "delete")
 
 if($mybb->input['action'] == 'toggle_status')
 {
-	if(!verify_post_check($mybb->input['my_post_key']))
+	if(!verify_post_check($mybb->get_input('my_post_key')))
 	{
 		flash_message($lang->invalid_post_verify_key2, 'error');
 		admin_redirect('index.php?module=config-attachment_types');
@@ -642,7 +650,7 @@ if($mybb->input['action'] == 'toggle_status')
 	if($attachment_type['enabled'] == 1)
 	{
 		$update_array['enabled'] = 0;
-		$phrase = $lang->success_activated_attachment_type;
+		$phrase = $lang->success_deactivated_attachment_type;
 	}
 
 	$plugins->run_hooks('admin_config_attachment_types_toggle_status_commit');
@@ -652,7 +660,7 @@ if($mybb->input['action'] == 'toggle_status')
 	$cache->update_attachtypes();
 
 	// Log admin action
-	log_admin_action($atid, htmlspecialchars_uni($attachment_type['extension']), $update_array['enabled']);
+	log_admin_action($atid, $attachment_type['extension'], $update_array['enabled']);
 
 	flash_message($phrase, 'success');
 	admin_redirect('index.php?module=config-attachment_types');
@@ -676,6 +684,26 @@ if(!$mybb->input['action'])
 
 	$page->output_nav_tabs($sub_tabs, 'attachment_types');
 
+	$query = $db->simple_select("attachtypes", "COUNT(atid) AS attachtypes");
+	$total_rows = $db->fetch_field($query, "attachtypes");
+
+	$pagenum = $mybb->get_input('page', MyBB::INPUT_INT);
+	if($pagenum)
+	{
+		$start = ($pagenum - 1) * 20;
+		$pages = ceil($total_rows / 20);
+		if($pagenum > $pages)
+		{
+			$start = 0;
+			$pagenum = 1;
+		}
+	}
+	else
+	{
+		$start = 0;
+		$pagenum = 1;
+	}
+
 	$table = new Table;
 	$table->construct_header($lang->extension, array("colspan" => 2));
 	$table->construct_header($lang->mime_type);
@@ -683,7 +711,7 @@ if(!$mybb->input['action'])
 	$table->construct_header($lang->maximum_size, array("class" => "align_center"));
 	$table->construct_header($lang->controls, array("class" => "align_center"));
 
-	$query = $db->simple_select("attachtypes", "*", "", array('order_by' => 'extension'));
+	$query = $db->simple_select("attachtypes", "*", "", array('limit_start' => $start, 'limit' => 20, 'order_by' => 'extension'));
 	while($attachment_type = $db->fetch_array($query))
 	{
 		// Just show default icons in ACP
@@ -718,6 +746,8 @@ if(!$mybb->input['action'])
 			$icon = "off.png\" alt=\"({$lang->alt_disabled})\" title=\"{$lang->alt_disabled}";
 		}
 
+		$attachment_type['extension'] = htmlspecialchars_uni($attachment_type['extension']);
+
 		$table->construct_cell($attachment_type['icon'], array("width" => 1));
 		$table->construct_cell("<strong>.{$attachment_type['extension']}</strong>");
 		$table->construct_cell(htmlspecialchars_uni($attachment_type['mimetype']));
@@ -741,6 +771,7 @@ if(!$mybb->input['action'])
 
 	$table->output($lang->attachment_types);
 
+	echo "<br />".draw_admin_pagination($pagenum, "20", $total_rows, "index.php?module=config-attachment_types&amp;page={page}");
+
 	$page->output_footer();
 }
-
