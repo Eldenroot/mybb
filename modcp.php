@@ -2060,36 +2060,44 @@ if($mybb->input['action'] == "do_modqueue")
 
 		redirect("modcp.php?action=modqueue&type=posts", $lang->redirect_postsmoderated);
 	}
-	else if(!empty($mybb->input['attachments']))
-	{
-		$attachments = array_map("intval", array_keys($mybb->input['attachments']));
-		$query = $db->query("
-			SELECT a.pid, a.aid
-			FROM  ".TABLE_PREFIX."attachments a
-			LEFT JOIN ".TABLE_PREFIX."posts p ON (a.pid=p.pid)
-			LEFT JOIN ".TABLE_PREFIX."threads t ON (t.tid=p.tid)
-			WHERE aid IN (".implode(",", $attachments)."){$tflist_queue_attach}
-		");
-		while($attachment = $db->fetch_array($query))
-		{
-			if(!isset($mybb->input['attachments'][$attachment['aid']]))
-			{
-				continue;
-			}
-			$action = $mybb->input['attachments'][$attachment['aid']];
-			if($action == "approve")
-			{
-				$db->update_query("attachments", array("visible" => 1), "aid='{$attachment['aid']}'");
-			}
-			else if($action == "delete")
-			{
-				remove_attachment($attachment['pid'], '', $attachment['aid']);
-			}
-		}
+else if(!empty($mybb->input['attachments']))
+{
+    $attachments = array_map("intval", array_keys($mybb->input['attachments']));
+    $query = $db->query("
+        SELECT a.pid, a.aid, t.tid
+        FROM  ".TABLE_PREFIX."attachments a
+        LEFT JOIN ".TABLE_PREFIX."posts p ON (a.pid=p.pid)
+        LEFT JOIN ".TABLE_PREFIX."threads t ON (t.tid=p.tid)
+        WHERE aid IN (".implode(",", $attachments)."){$tflist_queue_attach}
+    ");
+    while($attachment = $db->fetch_array($query))
+    {
+        if(!isset($mybb->input['attachments'][$attachment['aid']]))
+        {
+            continue;
+        }
+        $action = $mybb->input['attachments'][$attachment['aid']];
+        if($action == "approve")
+        {
+            $db->update_query("attachments", array("visible" => 1), "aid='{$attachment['aid']}'");
+            if(isset($attachment['tid']))
+            {
+                update_thread_counters((int)$attachment['tid'], array("attachmentcount" => "+1"));
+            }
+        }
+        else if($action == "delete")
+        {
+            remove_attachment($attachment['pid'], '', $attachment['aid']);
+            if(isset($attachment['tid']))
+            {
+                update_thread_counters((int)$attachment['tid'], array("attachmentcount" => "-1"));
+            }
+        }
+    }
 
-		$plugins->run_hooks("modcp_do_modqueue_end");
+    $plugins->run_hooks("modcp_do_modqueue_end");
 
-		redirect("modcp.php?action=modqueue&type=attachments", $lang->redirect_attachmentsmoderated);
+    redirect("modcp.php?action=modqueue&type=attachments", $lang->redirect_attachmentsmoderated);
 	}
 }
 
